@@ -18,7 +18,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,6 +34,12 @@
           "cameraPermission": "FitFlex uses your camera to identify gym equipment from a photo."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5d7afbfb-4304-4d69-907f-8184b8dd0872"
+      }
+    },
+    "owner": "team_k"
   }
 }
