@@ -1,8 +1,8 @@
-import { Linking, Platform } from 'react-native';
+import { getCheckoutRedirectUrl, openCheckoutUrl } from './checkout';
 import { supabase } from './supabase';
 
 export async function startCheckout(): Promise<void> {
-  const returnUrl = Platform.OS === 'web' ? window.location.href : undefined;
+  const returnUrl = getCheckoutRedirectUrl();
 
   const { data, error } = await supabase.functions.invoke<{ url?: string; error?: string }>(
     'create-checkout-session',
@@ -26,9 +26,5 @@ export async function startCheckout(): Promise<void> {
   if (data?.error) throw new Error(data.error);
   if (!data?.url) throw new Error('Stripe did not return a checkout URL.');
 
-  if (Platform.OS === 'web') {
-    window.location.href = data.url;
-  } else {
-    await Linking.openURL(data.url);
-  }
+  await openCheckoutUrl(data.url);
 }

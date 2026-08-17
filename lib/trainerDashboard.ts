@@ -1,4 +1,4 @@
-import { Linking, Platform } from 'react-native';
+import { getCheckoutRedirectUrl, openCheckoutUrl } from './checkout';
 import { supabase } from './supabase';
 import type { TrainerOrderView, TrainerProfile } from './types';
 
@@ -56,7 +56,7 @@ export async function fetchMyOrdersAsTrainer(): Promise<TrainerOrderView[]> {
 }
 
 export async function startTrainerOnboarding(): Promise<{ payoutsEnabled: boolean }> {
-  const returnUrl = Platform.OS === 'web' ? window.location.href : undefined;
+  const returnUrl = getCheckoutRedirectUrl();
 
   const { url, payoutsEnabled } = await invoke<{ url?: string; payoutsEnabled: boolean }>(
     'trainer-connect-onboarding',
@@ -66,11 +66,7 @@ export async function startTrainerOnboarding(): Promise<{ payoutsEnabled: boolea
   if (!url) throw new Error('Stripe did not return an onboarding URL.');
 
   if (!payoutsEnabled) {
-    if (Platform.OS === 'web') {
-      window.location.href = url;
-    } else {
-      await Linking.openURL(url);
-    }
+    await openCheckoutUrl(url);
   }
 
   return { payoutsEnabled };

@@ -1,4 +1,4 @@
-import { Linking, Platform } from 'react-native';
+import { getCheckoutRedirectUrl, openCheckoutUrl } from './checkout';
 import { supabase } from './supabase';
 import type { TrainerOrderView, TrainerProfile } from './types';
 
@@ -52,7 +52,7 @@ export async function fetchMyOrdersAsClient(): Promise<TrainerOrderView[]> {
 }
 
 export async function buyTrainerPlan(trainerProfileId: string): Promise<void> {
-  const returnUrl = Platform.OS === 'web' ? window.location.href : undefined;
+  const returnUrl = getCheckoutRedirectUrl();
 
   const { url } = await invoke<{ url?: string }>('create-trainer-checkout', {
     trainerProfileId,
@@ -62,9 +62,5 @@ export async function buyTrainerPlan(trainerProfileId: string): Promise<void> {
 
   if (!url) throw new Error('Stripe did not return a checkout URL.');
 
-  if (Platform.OS === 'web') {
-    window.location.href = url;
-  } else {
-    await Linking.openURL(url);
-  }
+  await openCheckoutUrl(url);
 }

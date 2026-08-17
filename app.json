@@ -3,6 +3,7 @@
     "name": "FitFlex",
     "slug": "FitFlex",
     "version": "1.0.0",
+    "scheme": "fitflex",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -33,7 +34,8 @@
           "photosPermission": "FitFlex uses your photos to identify gym equipment from a picture.",
           "cameraPermission": "FitFlex uses your camera to identify gym equipment from a photo."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

@@ -1,4 +1,4 @@
-import { Linking, Platform } from 'react-native';
+import { getCheckoutRedirectUrl, openCheckoutUrl } from './checkout';
 import { supabase } from './supabase';
 import type { DigitalProduct, DigitalProductContent, DigitalProductWithStatus } from './types';
 
@@ -62,7 +62,7 @@ export async function fetchDigitalProductContent(productId: string): Promise<Dig
 }
 
 export async function buyDigitalProduct(productId: string): Promise<void> {
-  const returnUrl = Platform.OS === 'web' ? window.location.href : undefined;
+  const returnUrl = getCheckoutRedirectUrl();
 
   const { url } = await invoke<{ url?: string }>('create-digital-product-checkout', {
     productId,
@@ -72,9 +72,5 @@ export async function buyDigitalProduct(productId: string): Promise<void> {
 
   if (!url) throw new Error('Stripe did not return a checkout URL.');
 
-  if (Platform.OS === 'web') {
-    window.location.href = url;
-  } else {
-    await Linking.openURL(url);
-  }
+  await openCheckoutUrl(url);
 }

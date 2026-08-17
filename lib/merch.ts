@@ -1,4 +1,4 @@
-import { Linking, Platform } from 'react-native';
+import { getCheckoutRedirectUrl, openCheckoutUrl } from './checkout';
 import { supabase } from './supabase';
 import type { MerchOrder, MerchProduct } from './types';
 
@@ -46,7 +46,7 @@ export async function fetchMyMerchOrders(): Promise<MerchOrder[]> {
 }
 
 export async function buyMerch(productId: number, syncVariantId: number): Promise<void> {
-  const returnUrl = Platform.OS === 'web' ? window.location.href : undefined;
+  const returnUrl = getCheckoutRedirectUrl();
 
   const { url } = await invoke<{ url?: string }>('create-merch-checkout', {
     productId,
@@ -57,9 +57,5 @@ export async function buyMerch(productId: number, syncVariantId: number): Promis
 
   if (!url) throw new Error('Stripe did not return a checkout URL.');
 
-  if (Platform.OS === 'web') {
-    window.location.href = url;
-  } else {
-    await Linking.openURL(url);
-  }
+  await openCheckoutUrl(url);
 }

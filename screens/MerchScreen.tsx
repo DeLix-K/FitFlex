@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -41,6 +42,7 @@ export default function MerchScreen() {
   const [selectedVariant, setSelectedVariant] = useState<Record<number, number>>({});
   const [buyingVariantId, setBuyingVariantId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -81,6 +83,19 @@ export default function MerchScreen() {
   }
 
   return (
+    <>
+    <Modal
+      visible={!!viewingImageUrl}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setViewingImageUrl(null)}
+    >
+      <Pressable style={styles.imageModalBackdrop} onPress={() => setViewingImageUrl(null)}>
+        {viewingImageUrl && (
+          <Image source={{ uri: viewingImageUrl }} style={styles.imageModalPhoto} resizeMode="contain" />
+        )}
+      </Pressable>
+    </Modal>
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -125,7 +140,9 @@ export default function MerchScreen() {
               onPress={() => setExpandedId(expanded ? null : item.id)}
             >
               {item.thumbnailUrl ? (
-                <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+                <Pressable onPress={() => setViewingImageUrl(item.thumbnailUrl)}>
+                  <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+                </Pressable>
               ) : (
                 <View style={styles.thumbnailPlaceholder} />
               )}
@@ -184,6 +201,7 @@ export default function MerchScreen() {
         );
       }}
     />
+    </>
   );
 }
 
@@ -333,5 +351,15 @@ const styles = StyleSheet.create({
   buyButtonText: {
     color: '#fff',
     fontWeight: '700',
+  },
+  imageModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalPhoto: {
+    width: '100%',
+    height: '80%',
   },
 });
