@@ -105,6 +105,7 @@ export default function AuthScreen() {
           placeholder="Password"
           secureTextEntry
           autoCapitalize="none"
+          importantForAutofill="no"
           value={password}
           onChangeText={setPassword}
         />

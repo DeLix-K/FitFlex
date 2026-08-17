@@ -54,6 +54,7 @@ export default function ResetPasswordScreen({ onDone }: { onDone: () => void }) 
         placeholder="New password"
         secureTextEntry
         autoCapitalize="none"
+        importantForAutofill="no"
         value={password}
         onChangeText={setPassword}
       />
@@ -62,6 +63,7 @@ export default function ResetPasswordScreen({ onDone }: { onDone: () => void }) 
         placeholder="Confirm new password"
         secureTextEntry
         autoCapitalize="none"
+        importantForAutofill="no"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
       />
