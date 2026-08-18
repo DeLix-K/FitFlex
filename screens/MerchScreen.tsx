@@ -9,7 +9,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { buyMerch, fetchMerchCatalog, fetchMyMerchOrders } from '../lib/merch';
+import { useCart } from '../lib/cartContext';
+import { buyCart, fetchMerchCatalog, fetchMyMerchOrders } from '../lib/merch';
 import { colors } from '../lib/theme';
 import type { MerchOrder, MerchProduct } from '../lib/types';
 
@@ -40,9 +41,12 @@ export default function MerchScreen() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<Record<number, number>>({});
-  const [buyingVariantId, setBuyingVariantId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
+
+  const cart = useCart();
 
   const load = useCallback(async () => {
     setError(null);
@@ -60,17 +64,34 @@ export default function MerchScreen() {
     load().finally(() => setLoading(false));
   }, [load]);
 
-  const handleBuy = async (product: MerchProduct) => {
+  const handleAddToCart = (product: MerchProduct) => {
     const variantId = selectedVariant[product.id] ?? product.variants.find((v) => v.available)?.syncVariantId;
-    if (!variantId) return;
+    const variant = product.variants.find((v) => v.syncVariantId === variantId);
+    if (!variant) return;
 
-    setBuyingVariantId(variantId);
+    cart.addItem({
+      productId: product.id,
+      syncVariantId: variant.syncVariantId,
+      productName: product.name,
+      thumbnailUrl: product.thumbnailUrl,
+      size: variant.size,
+      color: variant.color,
+      priceCents: variant.priceCents,
+    });
+  };
+
+  const handleCheckout = async () => {
+    setCheckingOut(true);
     setError(null);
     try {
-      await buyMerch(product.id, variantId);
+      await buyCart(cart.items);
+      cart.clearCart();
+      setCartOpen(false);
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setBuyingVariantId(null);
+    } finally {
+      setCheckingOut(false);
     }
   };
 
@@ -96,13 +117,97 @@ export default function MerchScreen() {
         )}
       </Pressable>
     </Modal>
+
+    <Modal visible={cartOpen} animationType="slide" onRequestClose={() => setCartOpen(false)}>
+      <View style={styles.cartContainer}>
+        <View style={styles.cartHeader}>
+          <Text style={styles.cartTitle}>Your Cart</Text>
+          <Pressable onPress={() => setCartOpen(false)}>
+            <Text style={styles.cartClose}>Close</Text>
+          </Pressable>
+        </View>
+
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        {cart.items.length === 0 ? (
+          <Text style={styles.empty}>Your cart is empty.</Text>
+        ) : (
+          <FlatList
+            data={cart.items}
+            keyExtractor={(item) => String(item.syncVariantId)}
+            contentContainerStyle={styles.cartList}
+            renderItem={({ item }) => (
+              <View style={styles.cartRow}>
+                {item.thumbnailUrl ? (
+                  <Image source={{ uri: item.thumbnailUrl }} style={styles.cartThumbnail} />
+                ) : (
+                  <View style={styles.thumbnailPlaceholder} />
+                )}
+                <View style={styles.cartRowInfo}>
+                  <Text style={styles.cartRowName}>{item.productName}</Text>
+                  <Text style={styles.cartRowVariant}>{item.size} / {item.color}</Text>
+                  <Text style={styles.cartRowPrice}>{formatPrice(item.priceCents)} each</Text>
+                </View>
+                <View style={styles.cartQtyControls}>
+                  <Pressable
+                    style={styles.cartQtyButton}
+                    onPress={() => cart.updateQuantity(item.syncVariantId, item.quantity - 1)}
+                  >
+                    <Text style={styles.cartQtyButtonText}>−</Text>
+                  </Pressable>
+                  <Text style={styles.cartQtyValue}>{item.quantity}</Text>
+                  <Pressable
+                    style={styles.cartQtyButton}
+                    onPress={() => cart.updateQuantity(item.syncVariantId, item.quantity + 1)}
+                  >
+                    <Text style={styles.cartQtyButtonText}>+</Text>
+                  </Pressable>
+                </View>
+                <Pressable onPress={() => cart.removeItem(item.syncVariantId)}>
+                  <Text style={styles.cartRemove}>Remove</Text>
+                </Pressable>
+              </View>
+            )}
+          />
+        )}
+
+        {cart.items.length > 0 && (
+          <View style={styles.cartFooter}>
+            <View style={styles.cartTotalRow}>
+              <Text style={styles.cartTotalLabel}>Total</Text>
+              <Text style={styles.cartTotalValue}>{formatPrice(cart.totalCents)}</Text>
+            </View>
+            <Pressable style={styles.buyButton} onPress={handleCheckout} disabled={checkingOut}>
+              {checkingOut ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buyButtonText}>Checkout</Text>
+              )}
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </Modal>
+
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
       ListHeaderComponent={
         <>
-          <Text style={styles.title}>Merch</Text>
-          <Text style={styles.subtitle}>Official FitFlex gear, shipped straight to your door.</Text>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.title}>Merch</Text>
+              <Text style={styles.subtitle}>Official FitFlex gear, shipped straight to your door.</Text>
+            </View>
+            <Pressable style={styles.cartButton} onPress={() => setCartOpen(true)}>
+              <Text style={styles.cartButtonText}>🛒 Cart</Text>
+              {cart.totalCount > 0 && (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>{cart.totalCount}</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
           {error && <Text style={styles.error}>{error}</Text>}
 
           {orders.length > 0 && (
@@ -184,16 +289,12 @@ export default function MerchScreen() {
 
                 <Pressable
                   style={styles.buyButton}
-                  onPress={() => handleBuy(item)}
-                  disabled={buyingVariantId != null || (!chosenVariant && !item.variants.some((v) => v.available))}
+                  onPress={() => handleAddToCart(item)}
+                  disabled={!chosenVariant && !item.variants.some((v) => v.available)}
                 >
-                  {buyingVariantId != null ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buyButtonText}>
-                      Buy — {formatPrice(chosenVariant?.priceCents ?? item.variants.find((v) => v.available)?.priceCents ?? 0)}
-                    </Text>
-                  )}
+                  <Text style={styles.buyButtonText}>
+                    Add to Cart — {formatPrice(chosenVariant?.priceCents ?? item.variants.find((v) => v.available)?.priceCents ?? 0)}
+                  </Text>
                 </Pressable>
               </View>
             )}
@@ -219,6 +320,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
   title: {
     fontSize: 22,
     fontWeight: '700',
@@ -228,6 +334,35 @@ const styles = StyleSheet.create({
     color: colors.textFaint,
     marginTop: 4,
     marginBottom: 16,
+    maxWidth: 240,
+  },
+  cartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  cartButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cartBadge: {
+    marginLeft: 6,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  cartBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   error: {
     color: colors.danger,
@@ -361,5 +496,111 @@ const styles = StyleSheet.create({
   imageModalPhoto: {
     width: '100%',
     height: '80%',
+  },
+  cartContainer: {
+    flex: 1,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    backgroundColor: '#fff',
+  },
+  cartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cartTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  cartClose: {
+    color: colors.primary,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  cartList: {
+    paddingBottom: 20,
+  },
+  cartRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 12,
+  },
+  cartThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundMuted,
+  },
+  cartRowInfo: {
+    flex: 1,
+  },
+  cartRowName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cartRowVariant: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  cartRowPrice: {
+    fontSize: 12,
+    color: colors.textFaint,
+    marginTop: 1,
+  },
+  cartQtyControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cartQtyButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.borderInput,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartQtyButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  cartQtyValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 18,
+    textAlign: 'center',
+  },
+  cartRemove: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  cartFooter: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  cartTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  cartTotalLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  cartTotalValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });

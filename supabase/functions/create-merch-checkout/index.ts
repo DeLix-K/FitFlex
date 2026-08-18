@@ -67,13 +67,34 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { productId, syncVariantId, successUrl, cancelUrl } = await req.json().catch(() => ({}));
-    if (!productId || !syncVariantId) {
-      return new Response(JSON.stringify({ error: 'Missing productId or syncVariantId.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    const { items: cartItems, successUrl, cancelUrl } = await req.json().catch(() => ({}));
+
+    const MAX_LINE_QUANTITY = 20;
+    const MAX_CART_LINES = 30;
+
+    const itemsValid =
+      Array.isArray(cartItems) &&
+      cartItems.length > 0 &&
+      cartItems.length <= MAX_CART_LINES &&
+      cartItems.every(
+        (item: unknown) =>
+          typeof item === 'object' &&
+          item !== null &&
+          Number.isFinite((item as { productId?: unknown }).productId) &&
+          Number.isFinite((item as { syncVariantId?: unknown }).syncVariantId) &&
+          Number.isInteger((item as { quantity?: unknown }).quantity) &&
+          (item as { quantity: number }).quantity > 0 &&
+          (item as { quantity: number }).quantity <= MAX_LINE_QUANTITY
+      );
+
+    if (!itemsValid) {
+      return new Response(
+        JSON.stringify({ error: 'Provide a non-empty "items" array of { productId, syncVariantId, quantity }.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    const requestedItems = cartItems as { productId: number; syncVariantId: number; quantity: number }[];
 
     const userClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -100,31 +121,65 @@ Deno.serve(async (req) => {
       });
     }
 
-    const detailResponse = await fetch(`https://api.printful.com/store/products/${encodeURIComponent(String(productId))}`, {
-      headers: printfulHeaders(),
-    });
-    if (!detailResponse.ok) {
-      return new Response(JSON.stringify({ error: 'Product not found.' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // Fetch each distinct product's detail once (cart items can share a product
+    // across different variants), then re-validate every requested variant's
+    // price/availability server-side rather than trusting the client's cart.
+    const uniqueProductIds = [...new Set(requestedItems.map((i) => i.productId))];
+    const productDetails = new Map<number, { result?: { sync_product?: { name?: string }; sync_variants?: unknown[] } }>();
+
+    for (const pid of uniqueProductIds) {
+      const detailResponse = await fetch(
+        `https://api.printful.com/store/products/${encodeURIComponent(String(pid))}`,
+        { headers: printfulHeaders() }
+      );
+      if (!detailResponse.ok) {
+        return new Response(JSON.stringify({ error: `Product ${pid} not found.` }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      productDetails.set(pid, await detailResponse.json());
+    }
+
+    type ResolvedLine = {
+      syncVariantId: number;
+      name: string;
+      size: string;
+      color: string;
+      quantity: number;
+      priceCents: number;
+      currency: string;
+    };
+
+    const resolvedLines: ResolvedLine[] = [];
+    for (const item of requestedItems) {
+      const detail = productDetails.get(item.productId);
+      const productName = detail?.result?.sync_product?.name as string | undefined;
+      const variant = (detail?.result?.sync_variants ?? []).find(
+        (v: unknown) => (v as { id: number }).id === item.syncVariantId
+      ) as
+        | { id: number; name: string; size: string; color: string; retail_price: string; currency: string; availability_status: string }
+        | undefined;
+
+      if (!variant || variant.availability_status !== 'active') {
+        return new Response(
+          JSON.stringify({ error: `"${productName ?? 'An item'}" is not available right now.` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      resolvedLines.push({
+        syncVariantId: variant.id,
+        name: `${productName ?? 'FitFlex Merch'} — ${variant.name}`,
+        size: variant.size,
+        color: variant.color,
+        quantity: item.quantity,
+        priceCents: Math.round(parseFloat(variant.retail_price) * 100),
+        currency: (variant.currency ?? 'usd').toLowerCase(),
       });
     }
 
-    const detailData = await detailResponse.json();
-    const productName = detailData.result?.sync_product?.name as string | undefined;
-    const variant = (detailData.result?.sync_variants ?? []).find(
-      (v: { id: number }) => v.id === syncVariantId
-    );
-
-    if (!variant || variant.availability_status !== 'active') {
-      return new Response(JSON.stringify({ error: 'This item is not available right now.' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const priceCents = Math.round(parseFloat(variant.retail_price) * 100);
-    const itemName = `${productName ?? 'FitFlex Merch'} — ${variant.name}`;
+    const amountCents = resolvedLines.reduce((sum, l) => sum + l.priceCents * l.quantity, 0);
 
     const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
     if (!stripeSecretKey) {
@@ -139,16 +194,14 @@ Deno.serve(async (req) => {
       mode: 'payment',
       customer_email: user.email,
       shipping_address_collection: { allowed_countries: [...ALLOWED_SHIPPING_COUNTRIES] },
-      line_items: [
-        {
-          price_data: {
-            currency: (variant.currency ?? 'usd').toLowerCase(),
-            unit_amount: priceCents,
-            product_data: { name: itemName },
-          },
-          quantity: 1,
+      line_items: resolvedLines.map((line) => ({
+        price_data: {
+          currency: line.currency,
+          unit_amount: line.priceCents,
+          product_data: { name: line.name },
         },
-      ],
+        quantity: line.quantity,
+      })),
       success_url: safeRedirect(successUrl, req.headers.get('Origin')),
       cancel_url: safeRedirect(cancelUrl ?? successUrl, req.headers.get('Origin')),
       metadata: {
@@ -166,17 +219,15 @@ Deno.serve(async (req) => {
       user_id: user.id,
       status: 'pending_payment',
       stripe_checkout_session_id: session.id,
-      items: [
-        {
-          syncVariantId: variant.id,
-          name: itemName,
-          size: variant.size,
-          color: variant.color,
-          quantity: 1,
-          priceCents,
-        },
-      ],
-      amount_cents: priceCents,
+      items: resolvedLines.map((line) => ({
+        syncVariantId: line.syncVariantId,
+        name: line.name,
+        size: line.size,
+        color: line.color,
+        quantity: line.quantity,
+        priceCents: line.priceCents,
+      })),
+      amount_cents: amountCents,
     });
 
     if (insertError) {

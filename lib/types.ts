@@ -222,6 +222,17 @@ export type MerchOrder = {
   created_at: string;
 };
 
+export type CartItem = {
+  productId: number;
+  syncVariantId: number;
+  productName: string;
+  thumbnailUrl: string;
+  size: string;
+  color: string;
+  priceCents: number;
+  quantity: number;
+};
+
 export type SleepSource = 'manual' | 'oura';
 
 export type SleepLog = {

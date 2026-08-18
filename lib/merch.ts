@@ -1,6 +1,6 @@
 import { getCheckoutRedirectUrl, openCheckoutUrl } from './checkout';
 import { supabase } from './supabase';
-import type { MerchOrder, MerchProduct } from './types';
+import type { CartItem, MerchOrder, MerchProduct } from './types';
 
 async function invoke<T>(name: string, body?: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke<T & { error?: string }>(name, {
@@ -45,12 +45,15 @@ export async function fetchMyMerchOrders(): Promise<MerchOrder[]> {
   return (data ?? []) as MerchOrder[];
 }
 
-export async function buyMerch(productId: number, syncVariantId: number): Promise<void> {
+export async function buyCart(items: CartItem[]): Promise<void> {
   const returnUrl = getCheckoutRedirectUrl();
 
   const { url } = await invoke<{ url?: string }>('create-merch-checkout', {
-    productId,
-    syncVariantId,
+    items: items.map((i) => ({
+      productId: i.productId,
+      syncVariantId: i.syncVariantId,
+      quantity: i.quantity,
+    })),
     successUrl: returnUrl,
     cancelUrl: returnUrl,
   });

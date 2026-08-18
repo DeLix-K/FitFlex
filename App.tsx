@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import AppShell, { type Tab } from './components/AppShell';
 import { useAuth } from './hooks/useAuth';
+import { CartProvider } from './lib/cartContext';
 import { exchangeOuraCode } from './lib/oura';
 import { supabase } from './lib/supabase';
 import AuthScreen from './screens/AuthScreen';
@@ -119,6 +120,7 @@ export default function App() {
   return (
     <>
       {session ? (
+        <CartProvider>
         <AppShell session={session} activeTab={activeTab} onChangeTab={setActiveTab}>
           {activeTab === 'coach' && <CoachScreen />}
           {activeTab === 'streaks' && <StreaksScreen />}
@@ -141,6 +143,7 @@ export default function App() {
           {activeTab === 'profile' && <ProfileScreen />}
           {activeTab === 'videos' && <ManageVideosScreen />}
         </AppShell>
+        </CartProvider>
       ) : (
         <AuthScreen />
       )}
