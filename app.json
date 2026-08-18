@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fitflex.app",
+      "bundleIdentifier": "com.teamk.fitflex",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
