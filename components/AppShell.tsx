@@ -2,9 +2,11 @@ import type { Session } from '@supabase/supabase-js';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
 
 export type Tab =
+  | 'dashboard'
   | 'coach'
   | 'streaks'
   | 'challenges'
@@ -29,6 +31,7 @@ export type Tab =
 const ADMIN_EMAIL = 'teamlix6@gmail.com';
 
 const BASE_TABS: { label: string; value: Tab }[] = [
+  { label: 'Home', value: 'dashboard' },
   { label: 'Coach', value: 'coach' },
   { label: 'Streaks', value: 'streaks' },
   { label: 'Challenges', value: 'challenges' },
@@ -120,7 +123,7 @@ export default function AppShell({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: dark.background,
     paddingTop: 60,
   },
   header: {
@@ -133,14 +136,15 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
+    color: dark.text,
   },
   subtitle: {
     fontSize: 13,
-    color: '#888',
+    color: dark.textMuted,
     marginTop: 2,
   },
   signOut: {
-    color: '#dc2626',
+    color: dark.danger,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 6,
@@ -148,7 +152,7 @@ const styles = StyleSheet.create({
   tabRow: {
     flexGrow: 0,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: dark.border,
   },
   tabRowContent: {
     flexDirection: 'row',
@@ -161,17 +165,18 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#111',
+    borderBottomColor: dark.accent,
   },
   tabText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#999',
+    color: dark.textFaint,
   },
   tabTextActive: {
-    color: '#111',
+    color: dark.accent,
   },
   content: {
     flex: 1,
+    backgroundColor: '#fff',
   },
 });

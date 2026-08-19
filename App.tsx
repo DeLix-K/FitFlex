@@ -10,6 +10,7 @@ import AuthScreen from './screens/AuthScreen';
 import ChallengesScreen from './screens/ChallengesScreen';
 import CoachScreen from './screens/CoachScreen';
 import CoursesScreen from './screens/CoursesScreen';
+import DashboardScreen from './screens/DashboardScreen';
 import DigitalProductsScreen from './screens/DigitalProductsScreen';
 import EquipmentScanScreen from './screens/EquipmentScanScreen';
 import ExerciseListScreen from './screens/ExerciseListScreen';
@@ -31,7 +32,7 @@ import WellnessScreen from './screens/WellnessScreen';
 
 export default function App() {
   const { session, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('coach');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
   // Detects the redirect back from a "reset password" email link — this app
   // has detectSessionInUrl: false (to avoid clashing with the Oura callback
@@ -122,6 +123,7 @@ export default function App() {
       {session ? (
         <CartProvider>
         <AppShell session={session} activeTab={activeTab} onChangeTab={setActiveTab}>
+          {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
           {activeTab === 'coach' && <CoachScreen />}
           {activeTab === 'streaks' && <StreaksScreen />}
           {activeTab === 'challenges' && <ChallengesScreen />}
