@@ -5,7 +5,7 @@ import {
   fetchDigitalProductContent,
   fetchDigitalProducts,
 } from '../lib/digitalProducts';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { DigitalProductContent, DigitalProductWithStatus } from '../lib/types';
 
 function formatPrice(cents: number): string {
@@ -68,7 +68,7 @@ export default function DigitalProductsScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -110,14 +110,14 @@ export default function DigitalProductsScreen() {
                 disabled={buyingId === item.id}
               >
                 {buyingId === item.id ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color="#0a0a0a" size="small" />
                 ) : (
                   <Text style={styles.buyButtonText}>Buy — {formatPrice(item.price_cents)}</Text>
                 )}
               </Pressable>
             ) : expanded ? (
               contentLoading ? (
-                <ActivityIndicator style={{ marginTop: 12 }} />
+                <ActivityIndicator style={{ marginTop: 12 }} color={dark.accent} />
               ) : (
                 <View style={styles.contentBox}>
                   {productContent?.body ? (
@@ -145,6 +145,7 @@ export default function DigitalProductsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -155,29 +156,32 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: dark.background,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
   empty: {
-    color: colors.textFaint,
+    color: dark.textFaint,
     textAlign: 'center',
     marginTop: 12,
   },
   card: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -191,30 +195,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     flex: 1,
+    color: dark.text,
   },
   cardPrice: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.primary,
+    color: dark.accent,
   },
   cardDescription: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 6,
   },
   buyButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 14,
   },
   buyButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
   },
   ownedHint: {
-    color: colors.success,
+    color: dark.accent,
     fontWeight: '600',
     fontSize: 12,
     marginTop: 10,
@@ -222,16 +227,16 @@ const styles = StyleSheet.create({
   contentBox: {
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: dark.border,
     paddingTop: 12,
   },
   contentText: {
     fontSize: 14,
-    color: colors.text,
+    color: dark.text,
     lineHeight: 20,
   },
   fileLink: {
-    color: colors.primary,
+    color: dark.accent,
     fontWeight: '600',
     marginTop: 10,
   },

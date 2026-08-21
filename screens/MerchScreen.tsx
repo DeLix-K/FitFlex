@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useCart } from '../lib/cartContext';
 import { buyCart, fetchMerchCatalog, fetchMyMerchOrders } from '../lib/merch';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { MerchOrder, MerchProduct } from '../lib/types';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -98,7 +98,7 @@ export default function MerchScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -179,7 +179,7 @@ export default function MerchScreen() {
             </View>
             <Pressable style={styles.buyButton} onPress={handleCheckout} disabled={checkingOut}>
               {checkingOut ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="#0a0a0a" />
               ) : (
                 <Text style={styles.buyButtonText}>Checkout</Text>
               )}
@@ -309,6 +309,7 @@ export default function MerchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -319,6 +320,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: dark.background,
   },
   headerRow: {
     flexDirection: 'row',
@@ -328,10 +330,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
     maxWidth: 240,
@@ -340,7 +343,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -348,10 +351,11 @@ const styles = StyleSheet.create({
   cartButtonText: {
     fontSize: 14,
     fontWeight: '600',
+    color: dark.text,
   },
   cartBadge: {
     marginLeft: 6,
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -360,22 +364,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   cartBadgeText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontSize: 11,
     fontWeight: '700',
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
+    color: dark.text,
     marginTop: 8,
     marginBottom: 8,
   },
   empty: {
-    color: colors.textFaint,
+    color: dark.textFaint,
     textAlign: 'center',
     marginTop: 12,
   },
@@ -384,7 +389,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
@@ -396,20 +402,22 @@ const styles = StyleSheet.create({
   orderItem: {
     fontSize: 13,
     fontWeight: '700',
+    color: dark.text,
   },
   orderStatus: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 2,
   },
   orderPrice: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textMuted,
+    color: dark.textMuted,
   },
   card: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 16,
     marginBottom: 12,
     overflow: 'hidden',
@@ -424,13 +432,13 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 8,
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surfaceElevated,
   },
   thumbnailPlaceholder: {
     width: 64,
     height: 64,
     borderRadius: 8,
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surfaceElevated,
   },
   cardInfo: {
     flex: 1,
@@ -438,10 +446,11 @@ const styles = StyleSheet.create({
   cardName: {
     fontSize: 15,
     fontWeight: '700',
+    color: dark.text,
   },
   cardPrice: {
     fontSize: 13,
-    color: colors.primary,
+    color: dark.accent,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -457,14 +466,14 @@ const styles = StyleSheet.create({
   },
   variantChip: {
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
     borderRadius: 16,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
   variantChipSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
   },
   variantChipDisabled: {
     opacity: 0.4,
@@ -472,19 +481,19 @@ const styles = StyleSheet.create({
   variantChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.text,
+    color: dark.text,
   },
   variantChipTextSelected: {
-    color: '#fff',
+    color: '#0a0a0a',
   },
   buyButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
   },
   buyButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
   },
   imageModalBackdrop: {
@@ -501,7 +510,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 60,
     paddingHorizontal: 20,
-    backgroundColor: '#fff',
+    backgroundColor: dark.background,
   },
   cartHeader: {
     flexDirection: 'row',
@@ -512,9 +521,10 @@ const styles = StyleSheet.create({
   cartTitle: {
     fontSize: 20,
     fontWeight: '700',
+    color: dark.text,
   },
   cartClose: {
-    color: colors.primary,
+    color: dark.accent,
     fontWeight: '600',
     fontSize: 15,
   },
@@ -526,14 +536,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: dark.border,
     paddingVertical: 12,
   },
   cartThumbnail: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surfaceElevated,
   },
   cartRowInfo: {
     flex: 1,
@@ -541,15 +551,16 @@ const styles = StyleSheet.create({
   cartRowName: {
     fontSize: 13,
     fontWeight: '700',
+    color: dark.text,
   },
   cartRowVariant: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 1,
   },
   cartRowPrice: {
     fontSize: 12,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 1,
   },
   cartQtyControls: {
@@ -562,30 +573,31 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cartQtyButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: colors.text,
+    color: dark.text,
   },
   cartQtyValue: {
     fontSize: 14,
     fontWeight: '600',
     minWidth: 18,
     textAlign: 'center',
+    color: dark.text,
   },
   cartRemove: {
-    color: colors.danger,
+    color: dark.danger,
     fontSize: 12,
     fontWeight: '600',
     marginLeft: 8,
   },
   cartFooter: {
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: dark.border,
     paddingTop: 16,
     paddingBottom: 24,
   },
@@ -597,10 +609,11 @@ const styles = StyleSheet.create({
   cartTotalLabel: {
     fontSize: 15,
     fontWeight: '700',
+    color: dark.text,
   },
   cartTotalValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.primary,
+    color: dark.accent,
   },
 });
