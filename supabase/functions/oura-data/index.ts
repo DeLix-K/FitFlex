@@ -130,10 +130,22 @@ Deno.serve(async (req) => {
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const summaryResponse = await fetch(
-      `https://api.ouraring.com/v2/usercollection/daily_activity?start_date=${today}&end_date=${today}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    const authHeaders = { Authorization: `Bearer ${accessToken}` };
+
+    // Readiness gives us a genuine recovery score + HRV balance sub-score --
+    // fetched alongside activity rather than fabricating these numbers.
+    // Failure here isn't fatal: readiness can be missing for a given day
+    // (e.g. a new ring) even when activity data exists.
+    const [summaryResponse, readinessResponse] = await Promise.all([
+      fetch(
+        `https://api.ouraring.com/v2/usercollection/daily_activity?start_date=${today}&end_date=${today}`,
+        { headers: authHeaders }
+      ),
+      fetch(
+        `https://api.ouraring.com/v2/usercollection/daily_readiness?start_date=${today}&end_date=${today}`,
+        { headers: authHeaders }
+      ),
+    ]);
 
     if (!summaryResponse.ok) {
       const errorBody = await summaryResponse.text();
@@ -144,12 +156,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    const readinessRecord = readinessResponse.ok
+      ? (await readinessResponse.json()).data?.[0]
+      : undefined;
+
     const summaryData = await summaryResponse.json();
     const record = summaryData.data?.[0];
 
     if (!record) {
       return new Response(
-        JSON.stringify({ connected: true, steps: 0, calories: 0, distance: 0, activeMinutes: 0 }),
+        JSON.stringify({
+          connected: true,
+          steps: 0,
+          calories: 0,
+          distance: 0,
+          activeMinutes: 0,
+          recoveryScore: readinessRecord?.score ?? null,
+          hrvBalance: readinessRecord?.contributors?.hrv_balance ?? null,
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -166,6 +190,8 @@ Deno.serve(async (req) => {
         calories: record.total_calories ?? 0,
         distance: Math.round(((record.equivalent_walking_distance ?? 0) / 1000) * 10) / 10,
         activeMinutes: Math.round(activeSeconds / 60),
+        recoveryScore: readinessRecord?.score ?? null,
+        hrvBalance: readinessRecord?.contributors?.hrv_balance ?? null,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

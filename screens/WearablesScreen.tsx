@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { disconnectOura, getOuraAuthUrl, getOuraData, type OuraData } from '../lib/oura';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 
 const REDIRECT_URI = Platform.OS === 'web' && typeof window !== 'undefined'
   ? window.location.origin
   : '';
+
+// Only Oura is a real, working integration today -- Fitbit closed self-serve
+// developer registration mid-build, and Apple Health / Google Health Connect
+// / Garmin all need native SDKs a managed Expo web build can't call. Listed
+// here honestly as "Coming soon" rather than faking a connected state.
+const COMING_SOON = ['Fitbit', 'Apple Health', 'Google Health Connect', 'Garmin'];
 
 export default function WearablesScreen() {
   const [data, setData] = useState<OuraData | null>(null);
@@ -55,7 +61,7 @@ export default function WearablesScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -67,46 +73,72 @@ export default function WearablesScreen() {
 
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {data?.connected ? (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Oura — Today</Text>
-            <Pressable onPress={handleDisconnect} disabled={busy}>
-              {busy ? (
-                <ActivityIndicator size="small" />
-              ) : (
-                <Text style={styles.disconnect}>Disconnect</Text>
-              )}
-            </Pressable>
-          </View>
-
-          <View style={styles.statsGrid}>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{data.steps.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Steps</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{data.calories.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Calories</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{data.distance} km</Text>
-              <Text style={styles.statLabel}>Distance</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>{data.activeMinutes}</Text>
-              <Text style={styles.statLabel}>Active min</Text>
-            </View>
-          </View>
+      <View style={styles.deviceRow}>
+        <View style={styles.deviceIconWrap}>
+          <Text style={styles.deviceIcon}>💍</Text>
         </View>
-      ) : (
-        <View style={styles.card}>
-          <Text style={styles.notConnectedText}>No wearable connected yet.</Text>
-          <Pressable style={styles.connectButton} onPress={handleConnect}>
-            <Text style={styles.connectButtonText}>Connect Oura</Text>
+        <View style={styles.deviceInfo}>
+          <Text style={styles.deviceName}>Oura Ring</Text>
+          <Text style={data?.connected ? styles.deviceStatus : styles.deviceStatusMuted}>
+            {data?.connected ? '✓ Connected · Synced just now' : 'Not connected'}
+          </Text>
+        </View>
+        {data?.connected ? (
+          <Pressable onPress={handleDisconnect} disabled={busy}>
+            {busy ? (
+              <ActivityIndicator size="small" color={dark.danger} />
+            ) : (
+              <Text style={styles.disconnect}>Disconnect</Text>
+            )}
           </Pressable>
+        ) : (
+          <Pressable style={styles.connectButton} onPress={handleConnect}>
+            <Text style={styles.connectButtonText}>Connect</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {data?.connected && (
+        <View style={styles.statsGrid}>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{data.steps.toLocaleString()}</Text>
+            <Text style={styles.statLabel}>Steps</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{data.calories.toLocaleString()}</Text>
+            <Text style={styles.statLabel}>Calories</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{data.distance} km</Text>
+            <Text style={styles.statLabel}>Distance</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{data.activeMinutes}</Text>
+            <Text style={styles.statLabel}>Active min</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{data.recoveryScore ?? '—'}</Text>
+            <Text style={styles.statLabel}>Recovery</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{data.hrvBalance ?? '—'}</Text>
+            <Text style={styles.statLabel}>HRV Balance</Text>
+          </View>
         </View>
       )}
+
+      <Text style={styles.sectionTitle}>More devices</Text>
+      {COMING_SOON.map((name) => (
+        <View key={name} style={styles.deviceRow}>
+          <View style={styles.deviceIconWrap}>
+            <Text style={styles.deviceIcon}>⌚</Text>
+          </View>
+          <View style={styles.deviceInfo}>
+            <Text style={styles.deviceName}>{name}</Text>
+            <Text style={styles.deviceStatusMuted}>Coming soon</Text>
+          </View>
+        </View>
+      ))}
     </View>
   );
 }
@@ -114,81 +146,118 @@ export default function WearablesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
     paddingHorizontal: 20,
     paddingTop: 16,
   },
   centered: {
     flex: 1,
+    backgroundColor: dark.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
+    color: dark.text,
     fontSize: 22,
     fontWeight: '700',
   },
   subtitle: {
     fontSize: 13,
-    color: '#888',
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
     lineHeight: 18,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
-  card: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 16,
-    padding: 20,
+  sectionTitle: {
+    color: dark.text,
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 8,
+    marginBottom: 10,
   },
-  cardHeader: {
+  deviceRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
   },
-  cardTitle: {
-    fontSize: 16,
+  deviceIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: dark.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deviceIcon: {
+    fontSize: 20,
+  },
+  deviceInfo: {
+    flex: 1,
+  },
+  deviceName: {
+    color: dark.text,
+    fontSize: 14,
     fontWeight: '700',
   },
+  deviceStatus: {
+    color: dark.accent,
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  deviceStatusMuted: {
+    color: dark.textFaint,
+    fontSize: 12,
+    marginTop: 2,
+  },
   disconnect: {
-    color: colors.danger,
+    color: dark.danger,
     fontSize: 13,
     fontWeight: '600',
+  },
+  connectButton: {
+    backgroundColor: dark.accent,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  connectButtonText: {
+    color: '#0a0a0a',
+    fontWeight: '700',
+    fontSize: 13,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 10,
+    marginBottom: 20,
   },
   statBox: {
-    width: '45%',
+    width: '31%',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 12,
+    padding: 12,
   },
   statValue: {
-    fontSize: 24,
+    color: dark.text,
+    fontSize: 18,
     fontWeight: '800',
   },
   statLabel: {
-    fontSize: 12,
-    color: '#888',
+    color: dark.textFaint,
+    fontSize: 11,
     marginTop: 2,
-  },
-  notConnectedText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  connectButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  connectButtonText: {
-    color: '#fff',
-    fontWeight: '700',
   },
 });

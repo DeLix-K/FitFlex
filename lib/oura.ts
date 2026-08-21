@@ -8,6 +8,8 @@ export type OuraData =
       calories: number;
       distance: number;
       activeMinutes: number;
+      recoveryScore: number | null;
+      hrvBalance: number | null;
       error?: string;
     };
 
