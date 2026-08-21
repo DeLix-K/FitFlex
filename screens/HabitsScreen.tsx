@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { checkInToday, createHabit, deleteHabit, fetchHabits, uncheckToday } from '../lib/habits';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { HabitWithStatus } from '../lib/types';
 
 export default function HabitsScreen() {
@@ -19,6 +19,7 @@ export default function HabitsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +51,7 @@ export default function HabitsScreen() {
     try {
       await createHabit(newName);
       setNewName('');
+      setAdding(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -85,10 +87,16 @@ export default function HabitsScreen() {
     }
   };
 
+  const completionPct = useMemo(() => {
+    if (habits.length === 0) return 0;
+    const done = habits.filter((h) => h.done_today).length;
+    return Math.round((done / habits.length) * 100);
+  }, [habits]);
+
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -97,29 +105,37 @@ export default function HabitsScreen() {
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
       ListHeaderComponent={
         <>
           <Text style={styles.title}>Habits</Text>
           <Text style={styles.subtitle}>Build daily habits and watch your streaks grow.</Text>
           {error && <Text style={styles.error}>{error}</Text>}
 
-          <View style={styles.newRow}>
-            <TextInput
-              style={styles.newInput}
-              placeholder="New habit (e.g. Drink water)"
-              value={newName}
-              onChangeText={setNewName}
-              onSubmitEditing={handleCreate}
-            />
-            <Pressable style={styles.addButton} onPress={handleCreate} disabled={creating}>
-              {creating ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.addButtonText}>Add</Text>
-              )}
+          {adding ? (
+            <View style={styles.newRow}>
+              <TextInput
+                style={styles.newInput}
+                placeholder="New habit (e.g. Drink water)"
+                placeholderTextColor={dark.textFaint}
+                value={newName}
+                onChangeText={setNewName}
+                onSubmitEditing={handleCreate}
+                autoFocus
+              />
+              <Pressable style={styles.addButton} onPress={handleCreate} disabled={creating}>
+                {creating ? (
+                  <ActivityIndicator size="small" color="#0a0a0a" />
+                ) : (
+                  <Text style={styles.addButtonText}>Add</Text>
+                )}
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable style={styles.createButton} onPress={() => setAdding(true)}>
+              <Text style={styles.createButtonText}>+ Create New Habit</Text>
             </Pressable>
-          </View>
+          )}
         </>
       }
       data={habits}
@@ -135,7 +151,7 @@ export default function HabitsScreen() {
             disabled={busyId === item.id}
           >
             {busyId === item.id ? (
-              <ActivityIndicator size="small" color={item.done_today ? '#fff' : colors.primary} />
+              <ActivityIndicator size="small" color={item.done_today ? '#0a0a0a' : dark.accent} />
             ) : (
               item.done_today && <Text style={styles.checkboxMark}>✓</Text>
             )}
@@ -148,11 +164,25 @@ export default function HabitsScreen() {
             </Text>
           </View>
 
+          <Text style={[styles.statusTag, item.done_today ? styles.statusDone : styles.statusPending]}>
+            {item.done_today ? 'Complete' : 'Pending'}
+          </Text>
+
           <Pressable onPress={() => handleDelete(item.id)} disabled={busyId === item.id}>
             <Text style={styles.remove}>Remove</Text>
           </Pressable>
         </View>
       )}
+      ListFooterComponent={
+        habits.length > 0 ? (
+          <View style={styles.completionBar}>
+            <Text style={styles.completionLabel}>Today's Completion: {completionPct}%</Text>
+            <View style={styles.completionTrack}>
+              <View style={[styles.completionFill, { width: `${completionPct}%` }]} />
+            </View>
+          </View>
+        ) : null
+      }
     />
   );
 }
@@ -160,6 +190,7 @@ export default function HabitsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -168,21 +199,23 @@ const styles = StyleSheet.create({
   },
   centered: {
     flex: 1,
+    backgroundColor: dark.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
+    color: dark.text,
     fontSize: 22,
     fontWeight: '700',
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
   newRow: {
@@ -193,14 +226,16 @@ const styles = StyleSheet.create({
   newInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    color: dark.text,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
   },
   addButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingHorizontal: 18,
     justifyContent: 'center',
@@ -208,11 +243,23 @@ const styles = StyleSheet.create({
     minWidth: 64,
   },
   addButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
+    fontWeight: '700',
+  },
+  createButton: {
+    borderWidth: 1,
+    borderColor: dark.accent,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  createButtonText: {
+    color: dark.accent,
     fontWeight: '700',
   },
   empty: {
-    color: colors.textFaint,
+    color: dark.textFaint,
     textAlign: 'center',
     marginTop: 12,
   },
@@ -220,26 +267,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
-    gap: 12,
+    gap: 10,
   },
   checkbox: {
     width: 32,
     height: 32,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: dark.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxDone: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
   },
   checkboxMark: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
   },
   rowMiddle: {
@@ -248,15 +296,52 @@ const styles = StyleSheet.create({
   habitName: {
     fontSize: 15,
     fontWeight: '700',
+    color: dark.text,
   },
   habitStreak: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 2,
   },
+  statusTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  statusDone: {
+    color: '#0a0a0a',
+    backgroundColor: dark.accent,
+  },
+  statusPending: {
+    color: dark.textMuted,
+    backgroundColor: dark.surfaceElevated,
+  },
   remove: {
-    color: colors.danger,
-    fontSize: 13,
+    color: dark.danger,
+    fontSize: 12,
     fontWeight: '600',
+  },
+  completionBar: {
+    marginTop: 8,
+  },
+  completionLabel: {
+    color: dark.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  completionTrack: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: dark.surfaceElevated,
+    overflow: 'hidden',
+  },
+  completionFill: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: dark.accent,
   },
 });
