@@ -194,6 +194,17 @@ export type MoodLog = {
   ai_reflection: string | null;
   created_at: string;
   updated_at: string;
+  stress: number | null;
+  energy: number | null;
+};
+
+export type HydrationLog = {
+  id: string;
+  user_id: string;
+  log_date: string;
+  glasses: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type MerchVariant = {

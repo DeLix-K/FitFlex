@@ -545,6 +545,8 @@ create table if not exists mood_logs (
   ai_reflection text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  stress int check (stress between 1 and 5),
+  energy int check (energy between 1 and 5),
   unique (user_id, log_date)
 );
 
@@ -559,6 +561,32 @@ create policy "Users manage their own mood logs"
 drop trigger if exists mood_logs_set_updated_at on mood_logs;
 create trigger mood_logs_set_updated_at
   before update on mood_logs
+  for each row execute function set_updated_at();
+
+-- ─────────────────────────────────────────────
+-- Hydration: simple daily glass counter, private per user.
+-- ─────────────────────────────────────────────
+create table if not exists hydration_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  log_date date not null,
+  glasses int not null default 0 check (glasses >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, log_date)
+);
+
+alter table hydration_logs enable row level security;
+
+drop policy if exists "Users manage their own hydration logs" on hydration_logs;
+create policy "Users manage their own hydration logs"
+  on hydration_logs for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop trigger if exists hydration_logs_set_updated_at on hydration_logs;
+create trigger hydration_logs_set_updated_at
+  before update on hydration_logs
   for each row execute function set_updated_at();
 
 -- ─────────────────────────────────────────────
@@ -778,6 +806,7 @@ grant select on exercises to anon, authenticated;
 grant select, insert, update, delete on workout_plans to authenticated;
 grant select, insert, update, delete on workout_plan_exercises to authenticated;
 grant select, insert, update, delete on ai_history to authenticated;
+grant select, insert, update, delete on hydration_logs to authenticated;
 grant select on profiles to authenticated;
 grant update (display_name) on profiles to authenticated;
 grant update (height_cm, weight_kg, age, sex, activity_level, goal) on profiles to authenticated;
