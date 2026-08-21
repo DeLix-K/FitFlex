@@ -9,7 +9,9 @@ import {
   View,
 } from 'react-native';
 import { computeTargets, deleteAccount, fetchBodyStats, updateBodyStats } from '../lib/profile';
-import { colors } from '../lib/theme';
+import { getMyStats, updateDisplayName } from '../lib/streaks';
+import { supabase } from '../lib/supabase';
+import { dark } from '../lib/theme';
 import type { ActivityLevel, BodyStats, Goal, Sex } from '../lib/types';
 
 const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string }[] = [
@@ -25,6 +27,18 @@ const GOAL_OPTIONS: { value: Goal; label: string }[] = [
   { value: 'maintain', label: 'Maintain' },
   { value: 'gain', label: 'Gain Weight' },
 ];
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : '';
+  return (first + last).toUpperCase() || '?';
+}
+
+function formatMemberSince(iso: string | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
 
 export default function ProfileScreen() {
   const [stats, setStats] = useState<BodyStats>({
@@ -45,16 +59,41 @@ export default function ProfileScreen() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [email, setEmail] = useState('');
+  const [memberSince, setMemberSince] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [savingName, setSavingName] = useState(false);
+  const [activityStats, setActivityStats] = useState<{
+    currentStreak: number;
+    longestStreak: number;
+    totalWorkouts: number;
+  } | null>(null);
+
   const load = useCallback(async () => {
     setError(null);
     try {
-      const data = await fetchBodyStats();
+      const [data, { data: userData }, myStats] = await Promise.all([
+        fetchBodyStats(),
+        supabase.auth.getUser(),
+        getMyStats(),
+      ]);
       if (data) {
         setStats(data);
         setHeightInput(data.height_cm != null ? String(data.height_cm) : '');
         setWeightInput(data.weight_kg != null ? String(data.weight_kg) : '');
         setAgeInput(data.age != null ? String(data.age) : '');
       }
+      setEmail(userData.user?.email ?? '');
+      setMemberSince(formatMemberSince(userData.user?.created_at));
+      setDisplayName(myStats.displayName);
+      setNameInput(myStats.displayName);
+      setActivityStats({
+        currentStreak: myStats.currentStreak,
+        longestStreak: myStats.longestStreak,
+        totalWorkouts: myStats.totalWorkouts,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -64,6 +103,26 @@ export default function ProfileScreen() {
     setLoading(true);
     load().finally(() => setLoading(false));
   }, [load]);
+
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed || trimmed === displayName) {
+      setEditingName(false);
+      setNameInput(displayName);
+      return;
+    }
+    setSavingName(true);
+    setError(null);
+    try {
+      await updateDisplayName(trimmed);
+      setDisplayName(trimmed);
+      setEditingName(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingName(false);
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -143,7 +202,7 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -153,10 +212,66 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Profile</Text>
+      {error && <Text style={styles.error}>{error}</Text>}
+
+      <View style={styles.identityCard}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initials(displayName || 'Fitness Fan')}</Text>
+        </View>
+        <View style={styles.identityInfo}>
+          {editingName ? (
+            <View style={styles.nameEditRow}>
+              <TextInput
+                style={styles.nameInput}
+                value={nameInput}
+                onChangeText={setNameInput}
+                autoFocus
+                placeholder="Your name"
+                placeholderTextColor={dark.textFaint}
+              />
+              <Pressable onPress={handleSaveName} disabled={savingName} style={styles.nameSaveButton}>
+                {savingName ? (
+                  <ActivityIndicator size="small" color="#0a0a0a" />
+                ) : (
+                  <Text style={styles.nameSaveButtonText}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => {
+                setNameInput(displayName);
+                setEditingName(true);
+              }}
+            >
+              <Text style={styles.displayName}>{displayName} ✎</Text>
+            </Pressable>
+          )}
+          {email ? <Text style={styles.email}>{email}</Text> : null}
+          {memberSince ? <Text style={styles.memberSince}>Member since {memberSince}</Text> : null}
+        </View>
+      </View>
+
+      {activityStats && (
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{activityStats.currentStreak}</Text>
+            <Text style={styles.statLabel}>Day Streak</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{activityStats.longestStreak}</Text>
+            <Text style={styles.statLabel}>Best Streak</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statValue}>{activityStats.totalWorkouts}</Text>
+            <Text style={styles.statLabel}>Workouts</Text>
+          </View>
+        </View>
+      )}
+
       <Text style={styles.subtitle}>
         Add your body stats to get personalized daily calorie and protein targets.
       </Text>
-      {error && <Text style={styles.error}>{error}</Text>}
 
       <View style={styles.form}>
         <View style={styles.row}>
@@ -168,6 +283,7 @@ export default function ProfileScreen() {
               onChangeText={setHeightInput}
               keyboardType="decimal-pad"
               placeholder="175"
+              placeholderTextColor={dark.textFaint}
             />
           </View>
           <View style={styles.field}>
@@ -178,6 +294,7 @@ export default function ProfileScreen() {
               onChangeText={setWeightInput}
               keyboardType="decimal-pad"
               placeholder="70"
+              placeholderTextColor={dark.textFaint}
             />
           </View>
           <View style={styles.field}>
@@ -188,6 +305,7 @@ export default function ProfileScreen() {
               onChangeText={setAgeInput}
               keyboardType="number-pad"
               placeholder="30"
+              placeholderTextColor={dark.textFaint}
             />
           </View>
         </View>
@@ -241,7 +359,7 @@ export default function ProfileScreen() {
 
         <Pressable style={styles.saveButton} onPress={handleSave} disabled={saving}>
           {saving ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ActivityIndicator color="#0a0a0a" size="small" />
           ) : (
             <Text style={styles.saveButtonText}>{saved ? 'Saved ✓' : 'Save'}</Text>
           )}
@@ -259,6 +377,14 @@ export default function ProfileScreen() {
             <View style={styles.targetBox}>
               <Text style={styles.targetValue}>{targets.proteinGrams}g</Text>
               <Text style={styles.targetLabel}>protein</Text>
+            </View>
+            <View style={styles.targetBox}>
+              <Text style={styles.targetValue}>{targets.carbGrams}g</Text>
+              <Text style={styles.targetLabel}>carbs</Text>
+            </View>
+            <View style={styles.targetBox}>
+              <Text style={styles.targetValue}>{targets.fatGrams}g</Text>
+              <Text style={styles.targetLabel}>fat</Text>
             </View>
           </View>
         </View>
@@ -301,6 +427,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -311,24 +438,117 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: dark.background,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textFaint,
-    marginTop: 4,
+    color: dark.textFaint,
+    marginTop: 16,
     marginBottom: 16,
   },
   error: {
-    color: colors.danger,
-    marginBottom: 12,
+    color: dark.danger,
+    marginTop: 8,
+  },
+  identityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: dark.surfaceElevated,
+    borderWidth: 1,
+    borderColor: dark.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  avatarText: {
+    color: dark.accent,
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  identityInfo: {
+    flex: 1,
+  },
+  displayName: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: dark.text,
+  },
+  nameEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  nameInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.text,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
+  },
+  nameSaveButton: {
+    backgroundColor: dark.accent,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  nameSaveButtonText: {
+    color: '#0a0a0a',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  email: {
+    fontSize: 12,
+    color: dark.textMuted,
+    marginTop: 2,
+  },
+  memberSince: {
+    fontSize: 12,
+    color: dark.textFaint,
+    marginTop: 2,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  statBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: dark.accent,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: dark.textMuted,
+    marginTop: 2,
   },
   form: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -343,13 +563,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginBottom: 6,
     marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.text,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -362,36 +584,38 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
     borderRadius: 16,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
   chipSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
   },
   chipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.text,
+    color: dark.text,
   },
   chipTextSelected: {
-    color: '#fff',
+    color: '#0a0a0a',
   },
   saveButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 18,
   },
   saveButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
   },
   targetsCard: {
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surface,
+    borderWidth: 1,
+    borderColor: dark.border,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -399,25 +623,27 @@ const styles = StyleSheet.create({
   targetsTitle: {
     fontSize: 14,
     fontWeight: '700',
+    color: dark.text,
     marginBottom: 10,
   },
   targetsRow: {
     flexDirection: 'row',
-    gap: 24,
+    gap: 20,
+    flexWrap: 'wrap',
   },
   targetBox: {},
   targetValue: {
     fontSize: 22,
     fontWeight: '800',
-    color: colors.primary,
+    color: dark.accent,
   },
   targetLabel: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
   },
   dangerZone: {
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: dark.danger,
     borderRadius: 12,
     padding: 16,
     marginTop: 8,
@@ -425,24 +651,24 @@ const styles = StyleSheet.create({
   dangerTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 6,
   },
   dangerText: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginBottom: 12,
     lineHeight: 17,
   },
   deleteButton: {
     borderWidth: 1,
-    borderColor: colors.danger,
+    borderColor: dark.danger,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
   },
   deleteButtonText: {
-    color: colors.danger,
+    color: dark.danger,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -450,18 +676,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   deleteConfirmButton: {
-    backgroundColor: colors.danger,
+    backgroundColor: dark.danger,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
   },
   deleteConfirmButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 13,
   },
   cancelText: {
-    color: colors.textMuted,
+    color: dark.textMuted,
     textAlign: 'center',
     fontWeight: '600',
     fontSize: 13,
