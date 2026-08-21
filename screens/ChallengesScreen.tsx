@@ -18,7 +18,7 @@ import {
   leaveChallenge,
 } from '../lib/challenges';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { Challenge, ChallengeProgress } from '../lib/types';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -27,8 +27,17 @@ const STATUS_LABEL: Record<string, string> = {
   past: 'Ended',
 };
 
+type Tab = 'active' | 'popular' | 'new' | 'completed';
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'active', label: 'Active' },
+  { key: 'popular', label: 'Popular' },
+  { key: 'new', label: 'New' },
+  { key: 'completed', label: 'Completed' },
+];
+
 export default function ChallengesScreen() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('active');
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [myProgress, setMyProgress] = useState<Record<string, ChallengeProgress>>({});
@@ -116,31 +125,28 @@ export default function ChallengesScreen() {
     }
   };
 
-  const sections = useMemo(() => {
-    const groups: Record<'active' | 'upcoming' | 'past', Challenge[]> = {
-      active: [],
-      upcoming: [],
-      past: [],
-    };
-    for (const challenge of challenges) {
-      groups[getChallengeStatus(challenge)].push(challenge);
+  const visibleChallenges = useMemo(() => {
+    switch (tab) {
+      case 'active':
+        return challenges
+          .filter((c) => getChallengeStatus(c) === 'active')
+          .sort((a, b) => a.end_date.localeCompare(b.end_date));
+      case 'popular':
+        return [...challenges].sort((a, b) => (stats[b.id] ?? 0) - (stats[a.id] ?? 0));
+      case 'new':
+        return [...challenges].sort((a, b) => b.created_at.localeCompare(a.created_at));
+      case 'completed':
+        return challenges.filter((c) => {
+          const progress = myProgress[c.id];
+          return progress && progress.workouts_logged >= c.target_workouts;
+        });
     }
-    return [
-      ...(groups.active.length ? [{ title: 'Active', data: groups.active }] : []),
-      ...(groups.upcoming.length ? [{ title: 'Upcoming', data: groups.upcoming }] : []),
-      ...(groups.past.length ? [{ title: 'Ended', data: groups.past }] : []),
-    ];
-  }, [challenges]);
-
-  const flatData = useMemo(
-    () => sections.flatMap((section) => [{ header: section.title }, ...section.data]),
-    [sections]
-  );
+  }, [tab, challenges, stats, myProgress]);
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -149,25 +155,35 @@ export default function ChallengesScreen() {
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
       ListHeaderComponent={
         <>
           <Text style={styles.title}>Challenges</Text>
           <Text style={styles.subtitle}>Join a challenge and log workouts to complete it.</Text>
+
+          <View style={styles.tabRow}>
+            {TABS.map((t) => (
+              <Pressable
+                key={t.key}
+                style={[styles.tab, tab === t.key && styles.tabActive]}
+                onPress={() => setTab(t.key)}
+              >
+                <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
           {error && <Text style={styles.error}>{error}</Text>}
         </>
       }
-      data={flatData}
-      keyExtractor={(item) =>
-        'header' in item ? `header-${item.header}` : (item as Challenge).id
+      data={visibleChallenges}
+      keyExtractor={(item) => item.id}
+      ListEmptyComponent={
+        <Text style={styles.empty}>
+          {tab === 'completed' ? "You haven't completed a challenge yet." : 'No challenges here yet.'}
+        </Text>
       }
-      ListEmptyComponent={<Text style={styles.empty}>No challenges yet — check back soon.</Text>}
-      renderItem={({ item }) => {
-        if ('header' in item) {
-          return <Text style={styles.sectionTitle}>{item.header}</Text>;
-        }
-
-        const challenge = item as Challenge;
+      renderItem={({ item: challenge }) => {
         const status = getChallengeStatus(challenge);
         const progress = myProgress[challenge.id];
         const joined = !!progress;
@@ -182,12 +198,14 @@ export default function ChallengesScreen() {
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{challenge.title}</Text>
                 <View style={[styles.badge, status === 'active' && styles.badgeActive]}>
-                  <Text style={styles.badgeText}>{STATUS_LABEL[status]}</Text>
+                  <Text style={[styles.badgeText, status === 'active' && styles.badgeTextActive]}>
+                    {STATUS_LABEL[status]}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.cardDescription}>{challenge.description}</Text>
               <Text style={styles.cardMeta}>
-                {challenge.start_date} → {challenge.end_date} · {stats[challenge.id] ?? 0} joined
+                {challenge.start_date} → {challenge.end_date} · 🔥 {stats[challenge.id] ?? 0} participants
               </Text>
 
               {joined && (
@@ -197,8 +215,8 @@ export default function ChallengesScreen() {
                   </View>
                   <Text style={styles.progressText}>
                     {complete
-                      ? `✓ Completed — ${workoutsLogged}/${challenge.target_workouts}`
-                      : `${workoutsLogged}/${challenge.target_workouts} workouts`}
+                      ? `✓ Completed — ${workoutsLogged}/${challenge.target_workouts} Days`
+                      : `Progress: ${workoutsLogged}/${challenge.target_workouts} Days`}
                   </Text>
                 </View>
               )}
@@ -216,7 +234,7 @@ export default function ChallengesScreen() {
                   disabled={busyId === challenge.id}
                 >
                   {busyId === challenge.id ? (
-                    <ActivityIndicator size="small" color={colors.danger} />
+                    <ActivityIndicator size="small" color={dark.danger} />
                   ) : (
                     <Text style={styles.leaveButtonText}>Leave</Text>
                   )}
@@ -228,9 +246,9 @@ export default function ChallengesScreen() {
                   disabled={busyId === challenge.id}
                 >
                   {busyId === challenge.id ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <ActivityIndicator size="small" color="#0a0a0a" />
                   ) : (
-                    <Text style={styles.joinButtonText}>Join</Text>
+                    <Text style={styles.joinButtonText}>Join Challenge</Text>
                   )}
                 </Pressable>
               )}
@@ -239,7 +257,7 @@ export default function ChallengesScreen() {
             {expanded && (
               <View style={styles.leaderboard}>
                 {expandedLoading ? (
-                  <ActivityIndicator style={styles.leaderboardLoading} />
+                  <ActivityIndicator style={styles.leaderboardLoading} color={dark.accent} />
                 ) : expandedBoard.length === 0 ? (
                   <Text style={styles.empty}>No one has joined yet.</Text>
                 ) : (
@@ -269,6 +287,7 @@ export default function ChallengesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -277,37 +296,58 @@ const styles = StyleSheet.create({
   },
   centered: {
     flex: 1,
+    backgroundColor: dark.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
+    color: dark.text,
     fontSize: 22,
     fontWeight: '700',
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
   },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  tab: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+  },
+  tabActive: {
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: dark.textMuted,
+  },
+  tabTextActive: {
+    color: '#0a0a0a',
+  },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 8,
-    marginBottom: 8,
-  },
   empty: {
-    color: colors.textFaint,
+    color: dark.textFaint,
     textAlign: 'center',
     marginTop: 12,
   },
   card: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -321,30 +361,34 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
+    color: dark.text,
     flex: 1,
   },
   badge: {
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surfaceElevated,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   badgeActive: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: dark.accentDark,
   },
   badgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textMuted,
+    color: dark.textMuted,
+  },
+  badgeTextActive: {
+    color: '#0a0a0a',
   },
   cardDescription: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginBottom: 6,
   },
   cardMeta: {
     fontSize: 12,
-    color: colors.textFaint,
+    color: dark.textFaint,
   },
   progressWrap: {
     marginTop: 12,
@@ -352,17 +396,17 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surfaceElevated,
     overflow: 'hidden',
   },
   progressFill: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
   },
   progressText: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 4,
     fontWeight: '600',
   },
@@ -374,11 +418,11 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 13,
-    color: colors.primary,
+    color: dark.accent,
     fontWeight: '600',
   },
   actionButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 18,
@@ -386,22 +430,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   joinButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 13,
   },
   leaveButton: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: dark.danger,
   },
   leaveButtonText: {
-    color: colors.danger,
+    color: dark.danger,
     fontWeight: '700',
     fontSize: 13,
   },
   leaderboard: {
     marginTop: 14,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: dark.border,
     paddingTop: 12,
   },
   leaderboardLoading: {
@@ -411,29 +457,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
     borderRadius: 10,
     padding: 10,
     marginBottom: 6,
   },
   rowMe: {
-    borderColor: colors.primary,
-    backgroundColor: '#eff6ff',
+    borderColor: dark.accent,
+    backgroundColor: dark.surfaceElevated,
   },
   rank: {
     width: 20,
     fontSize: 12,
-    color: colors.textFaint,
+    color: dark.textFaint,
     fontWeight: '700',
   },
   rowName: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600',
-    color: '#222',
+    color: dark.text,
   },
   rowStat: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
   },
 });
