@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { fetchCourses } from '../lib/courses';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { CourseWithStatus } from '../lib/types';
 import CourseDetailScreen from './CourseDetailScreen';
 
@@ -41,7 +41,7 @@ export default function CoursesScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -97,6 +97,7 @@ export default function CoursesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -107,29 +108,32 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: dark.background,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
   empty: {
-    color: colors.textFaint,
+    color: dark.textFaint,
     textAlign: 'center',
     marginTop: 12,
   },
   card: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -143,25 +147,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     flex: 1,
+    color: dark.text,
   },
   cardPrice: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.primary,
+    color: dark.accent,
   },
   cardDescription: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 6,
   },
   cardMeta: {
     fontSize: 12,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 6,
   },
   buyHint: {
     fontSize: 12,
-    color: colors.primary,
+    color: dark.accent,
     fontWeight: '600',
     marginTop: 10,
   },
@@ -171,17 +176,17 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surfaceElevated,
     overflow: 'hidden',
   },
   progressFill: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
   },
   progressText: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 4,
     fontWeight: '600',
   },

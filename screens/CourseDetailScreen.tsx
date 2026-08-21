@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   buyCourse,
   fetchCompletedLessonIds,
@@ -8,7 +8,7 @@ import {
   markLessonIncomplete,
 } from '../lib/courses';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { Course, CourseLesson, CourseLessonPreview } from '../lib/types';
 
 function formatPrice(cents: number): string {
@@ -88,13 +88,13 @@ export default function CourseDetailScreen({
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Pressable onPress={onBack}>
         <Text style={styles.back}>{'< Courses'}</Text>
       </Pressable>
@@ -116,7 +116,7 @@ export default function CourseDetailScreen({
       {!enrolled && course && (
         <Pressable style={styles.buyButton} onPress={handleBuy} disabled={buying}>
           {buying ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color="#0a0a0a" />
           ) : (
             <Text style={styles.buyButtonText}>Buy Course — {formatPrice(course.price_cents)}</Text>
           )}
@@ -163,7 +163,7 @@ export default function CourseDetailScreen({
                   disabled={busyLessonId === preview.id}
                 >
                   {busyLessonId === preview.id ? (
-                    <ActivityIndicator size="small" color={done ? colors.textMuted : '#fff'} />
+                    <ActivityIndicator size="small" color={done ? dark.textMuted : '#0a0a0a'} />
                   ) : (
                     <Text
                       style={[
@@ -180,22 +180,27 @@ export default function CourseDetailScreen({
           </View>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
+  },
+  content: {
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: dark.background,
   },
   back: {
-    color: colors.primary,
+    color: dark.accent,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 16,
@@ -204,21 +209,22 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
   },
   description: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 4,
     lineHeight: 18,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginTop: 12,
   },
   certificate: {
-    backgroundColor: '#fffbeb',
+    backgroundColor: dark.surface,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: dark.accentDark,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -231,22 +237,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     marginTop: 4,
+    color: dark.text,
   },
   certificateText: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     textAlign: 'center',
     marginTop: 4,
   },
   buyButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 16,
   },
   buyButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
   },
   sectionTitle: {
@@ -254,10 +261,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 20,
     marginBottom: 10,
+    color: dark.text,
   },
   lessonCard: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     marginBottom: 10,
     overflow: 'hidden',
@@ -271,21 +280,22 @@ const styles = StyleSheet.create({
   lessonNumber: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.textFaint,
+    color: dark.textFaint,
   },
   lessonTitle: {
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
+    color: dark.text,
   },
   lessonTitleLocked: {
-    color: colors.textFaint,
+    color: dark.textFaint,
   },
   lockIcon: {
     fontSize: 14,
   },
   doneIcon: {
-    color: colors.success,
+    color: dark.accent,
     fontWeight: '700',
     fontSize: 16,
   },
@@ -295,30 +305,30 @@ const styles = StyleSheet.create({
   },
   lessonContent: {
     fontSize: 14,
-    color: colors.text,
+    color: dark.text,
     lineHeight: 20,
     marginBottom: 12,
   },
   videoLink: {
-    color: colors.primary,
+    color: dark.accent,
     fontWeight: '600',
     marginBottom: 12,
   },
   completeButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
   },
   completeButtonDone: {
-    backgroundColor: colors.backgroundMuted,
+    backgroundColor: dark.surfaceElevated,
   },
   completeButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 13,
   },
   completeButtonTextDone: {
-    color: colors.textMuted,
+    color: dark.textMuted,
   },
 });
