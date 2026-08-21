@@ -218,11 +218,18 @@ latest as (
   select distinct on (user_id) user_id, last_day, streak_length
   from grouped
   order by user_id, last_day desc
+),
+longest as (
+  select user_id, max(streak_length) as longest_streak
+  from grouped
+  group by user_id
 )
 select
-  user_id,
-  case when last_day >= current_date - 1 then streak_length else 0 end as current_streak
-from latest;
+  latest.user_id,
+  case when latest.last_day >= current_date - 1 then latest.streak_length else 0 end as current_streak,
+  longest.longest_streak
+from latest
+join longest on longest.user_id = latest.user_id;
 
 -- Only exposes display name + aggregate stats, never raw logs or emails.
 -- Runs with the owner's privileges (security_invoker = false, the Postgres
@@ -234,7 +241,8 @@ select
   p.id as user_id,
   coalesce(nullif(p.display_name, ''), 'Fitness Fan') as display_name,
   coalesce(s.current_streak, 0) as current_streak,
-  coalesce(t.total_workouts, 0) as total_workouts
+  coalesce(t.total_workouts, 0) as total_workouts,
+  coalesce(s.longest_streak, 0) as longest_streak
 from profiles p
 left join user_streaks s on s.user_id = p.id
 left join (

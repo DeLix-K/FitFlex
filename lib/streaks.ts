@@ -41,12 +41,13 @@ export async function logWorkoutToday(): Promise<void> {
 
 export async function getMyStats(): Promise<{
   currentStreak: number;
+  longestStreak: number;
   totalWorkouts: number;
   displayName: string;
 }> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
-  if (!userId) return { currentStreak: 0, totalWorkouts: 0, displayName: 'Fitness Fan' };
+  if (!userId) return { currentStreak: 0, longestStreak: 0, totalWorkouts: 0, displayName: 'Fitness Fan' };
 
   const { data, error } = await supabase
     .from('leaderboard')
@@ -58,9 +59,29 @@ export async function getMyStats(): Promise<{
 
   return {
     currentStreak: data?.current_streak ?? 0,
+    longestStreak: data?.longest_streak ?? 0,
     totalWorkouts: data?.total_workouts ?? 0,
     displayName: data?.display_name ?? 'Fitness Fan',
   };
+}
+
+// Returns the set of "YYYY-MM-DD" dates (inclusive) the user logged a
+// workout on, for the given range -- powers both the monthly calendar and
+// the "this week's consistency" count on the redesigned Streaks screen.
+export async function fetchLoggedDates(startDate: string, endDate: string): Promise<Set<string>> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return new Set();
+
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .select('logged_date')
+    .eq('user_id', userId)
+    .gte('logged_date', startDate)
+    .lte('logged_date', endDate);
+
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r) => r.logged_date as string));
 }
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {

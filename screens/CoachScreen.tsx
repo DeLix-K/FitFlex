@@ -14,10 +14,31 @@ import AiUsageIndicator from '../components/AiUsageIndicator';
 import { useAiGate } from '../hooks/useAiGate';
 import { saveHistoryEntry } from '../lib/aiHistory';
 import { askClaudeChat, buildCoachSystemPrompt, type ChatMessage } from '../lib/claude';
-import { colors } from '../lib/theme';
+import { getMyStats } from '../lib/streaks';
+import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
 
-const SUGGEST_WORKOUT_MESSAGE = "What should I do for today's workout?";
+const RECOMMENDATION_CARDS = [
+  { icon: '🏋️', label: "Today's Workout", prompt: "What should I do for today's workout?" },
+  { icon: '🍎', label: "Today's Nutrition", prompt: 'What should I eat today?' },
+  { icon: '💤', label: 'Recovery', prompt: 'How should I recover today?' },
+  { icon: '✅', label: 'Suggested Habit', prompt: 'Suggest one habit I should build starting today.' },
+] as const;
+
+const QUICK_PROMPTS = [
+  'Build me a workout',
+  'What should I eat?',
+  'Analyse my progress',
+  'Why am I feeling tired?',
+  'Adjust my plan',
+] as const;
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default function CoachScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -25,6 +46,7 @@ export default function CoachScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState('there');
   const aiGate = useAiGate();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -46,6 +68,10 @@ export default function CoachScreen() {
         });
         setSystemPrompt(buildCoachSystemPrompt(plans));
       });
+
+    getMyStats()
+      .then((s) => setDisplayName(s.displayName))
+      .catch(() => {});
   }, []);
 
   const send = async (text: string) => {
@@ -83,12 +109,17 @@ export default function CoachScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <View style={styles.header}>
-        <Text style={styles.title}>AI Coach</Text>
-        <AiUsageIndicator
-          isPremium={aiGate.isPremium}
-          remaining={aiGate.remaining}
-          loaded={aiGate.loaded}
-        />
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.greeting}>{greeting()}, {displayName} 👋</Text>
+            <Text style={styles.title}>Ready to make progress?</Text>
+          </View>
+          <AiUsageIndicator
+            isPremium={aiGate.isPremium}
+            remaining={aiGate.remaining}
+            loaded={aiGate.loaded}
+          />
+        </View>
       </View>
 
       <ScrollView
@@ -99,16 +130,23 @@ export default function CoachScreen() {
       >
         {messages.length === 0 && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>
-              Ask me anything about your training, nutrition, or motivation — or try the quick
-              action below.
-            </Text>
-            <Pressable
-              style={styles.suggestButton}
-              onPress={() => send(SUGGEST_WORKOUT_MESSAGE)}
-            >
-              <Text style={styles.suggestButtonText}>Suggest today's workout</Text>
-            </Pressable>
+            <View style={styles.cardGrid}>
+              {RECOMMENDATION_CARDS.map((card) => (
+                <Pressable key={card.label} style={styles.card} onPress={() => send(card.prompt)}>
+                  <Text style={styles.cardIcon}>{card.icon}</Text>
+                  <Text style={styles.cardLabel}>{card.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.quickPromptsLabel}>Quick questions</Text>
+            <View style={styles.quickPromptsRow}>
+              {QUICK_PROMPTS.map((prompt) => (
+                <Pressable key={prompt} style={styles.quickPromptChip} onPress={() => send(prompt)}>
+                  <Text style={styles.quickPromptText}>{prompt}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         )}
 
@@ -128,7 +166,7 @@ export default function CoachScreen() {
 
         {sending && (
           <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" />
+            <ActivityIndicator size="small" color={dark.accent} />
             <Text style={styles.loadingText}>Coach is thinking...</Text>
           </View>
         )}
@@ -140,6 +178,7 @@ export default function CoachScreen() {
         <TextInput
           style={styles.input}
           placeholder="Ask your coach..."
+          placeholderTextColor={dark.textFaint}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={() => send(input)}
@@ -160,44 +199,85 @@ export default function CoachScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
   },
-  title: {
-    fontSize: 22,
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  greeting: {
+    color: dark.text,
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 8,
+  },
+  title: {
+    color: dark.textMuted,
+    fontSize: 13,
+    marginTop: 2,
   },
   messagesScroll: {
     flex: 1,
   },
   messagesContent: {
     paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 16,
   },
   emptyState: {
-    paddingVertical: 24,
-    alignItems: 'center',
+    paddingBottom: 8,
   },
-  emptyText: {
-    fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 20,
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
   },
-  suggestButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+  card: {
+    width: '48%',
+    backgroundColor: dark.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: dark.border,
   },
-  suggestButtonText: {
-    color: '#fff',
-    fontWeight: '700',
+  cardIcon: {
+    fontSize: 22,
+    marginBottom: 8,
+  },
+  cardLabel: {
+    color: dark.text,
     fontSize: 13,
+    fontWeight: '700',
+  },
+  quickPromptsLabel: {
+    color: dark.textFaint,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  quickPromptsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickPromptChip: {
+    borderWidth: 1,
+    borderColor: dark.accentDark,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  quickPromptText: {
+    color: dark.accent,
+    fontSize: 13,
+    fontWeight: '600',
   },
   bubble: {
     borderRadius: 16,
@@ -207,20 +287,23 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
   },
   bubbleUser: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     alignSelf: 'flex-end',
   },
   bubbleCoach: {
-    backgroundColor: '#f1f1f1',
+    backgroundColor: dark.surface,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: dark.border,
   },
   bubbleUserText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontSize: 14,
     lineHeight: 20,
+    fontWeight: '500',
   },
   bubbleCoachText: {
-    color: '#222',
+    color: dark.text,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -232,10 +315,10 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 13,
-    color: '#666',
+    color: dark.textMuted,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 10,
     fontSize: 13,
   },
@@ -245,20 +328,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: dark.border,
     gap: 10,
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    color: dark.text,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 14,
   },
   sendButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 20,
     paddingVertical: 10,
     paddingHorizontal: 18,
@@ -267,7 +352,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   sendButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 13,
   },

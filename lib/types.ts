@@ -62,6 +62,7 @@ export type LeaderboardEntry = {
   display_name: string;
   current_streak: number;
   total_workouts: number;
+  longest_streak: number;
 };
 
 export type Challenge = {
