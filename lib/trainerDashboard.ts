@@ -72,6 +72,15 @@ export async function startTrainerOnboarding(): Promise<{ payoutsEnabled: boolea
   return { payoutsEnabled };
 }
 
+export async function submitTrainerProfile(params: {
+  displayName: string;
+  bio: string;
+  specialty: string;
+  priceCents: number;
+}): Promise<void> {
+  await invoke('trainer-signup', params);
+}
+
 export async function deliverPlan(params: {
   orderId: string;
   planName: string;

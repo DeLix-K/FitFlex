@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import TrainerChatModal from '../components/TrainerChatModal';
+import TrainerProfileForm from '../components/TrainerProfileForm';
 import { buyTrainerPlan, fetchMyOrdersAsClient, fetchTrainers } from '../lib/trainers';
+import { supabase } from '../lib/supabase';
 import { dark } from '../lib/theme';
 import type { TrainerOrderView, TrainerProfile } from '../lib/types';
 
@@ -25,17 +28,33 @@ function initials(name: string): string {
 export default function TrainersScreen() {
   const [trainers, setTrainers] = useState<TrainerProfile[]>([]);
   const [orders, setOrders] = useState<TrainerOrderView[]>([]);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [isTrainer, setIsTrainer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeSpecialty, setActiveSpecialty] = useState<string | null>(null);
+  const [signupOpen, setSignupOpen] = useState(false);
+  const [signupDone, setSignupDone] = useState(false);
+  const [chatTarget, setChatTarget] = useState<TrainerProfile | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [trainerList, myOrders] = await Promise.all([fetchTrainers(), fetchMyOrdersAsClient()]);
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id ?? null;
+      setMyUserId(userId);
+
+      const [trainerList, myOrders, profileRow] = await Promise.all([
+        fetchTrainers(),
+        fetchMyOrdersAsClient(),
+        userId
+          ? supabase.from('profiles').select('is_trainer').eq('id', userId).single()
+          : Promise.resolve({ data: null }),
+      ]);
       setTrainers(trainerList);
       setOrders(myOrders);
+      setIsTrainer(!!(profileRow as { data: { is_trainer: boolean } | null }).data?.is_trainer);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -79,92 +98,157 @@ export default function TrainersScreen() {
   }
 
   return (
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      ListHeaderComponent={
-        <>
-          <Text style={styles.title}>Trainers</Text>
-          <Text style={styles.subtitle}>
-            Buy a custom workout plan built for you by a real trainer or nutritionist.
-          </Text>
-          {error && <Text style={styles.error}>{error}</Text>}
+    <>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <>
+            <Text style={styles.title}>Trainers</Text>
+            <Text style={styles.subtitle}>
+              Book a custom workout plan built for you by a real trainer or nutritionist.
+            </Text>
+            {error && <Text style={styles.error}>{error}</Text>}
 
-          {orders.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>My Orders</Text>
-              {orders.map((order) => (
-                <View key={order.id} style={styles.orderRow}>
-                  <View style={styles.orderInfo}>
-                    <Text style={styles.orderTrainer}>{order.trainer_display_name}</Text>
-                    <Text style={styles.orderStatus}>{STATUS_LABEL[order.status]}</Text>
-                  </View>
-                  <Text style={styles.orderPrice}>{formatPrice(order.amount_cents)}</Text>
-                </View>
-              ))}
-            </>
-          )}
-
-          <Text style={styles.sectionTitle}>Browse Trainers</Text>
-
-          {specialties.length > 0 && (
-            <View style={styles.filterRow}>
-              <Pressable
-                style={[styles.filterChip, activeSpecialty === null && styles.filterChipActive]}
-                onPress={() => setActiveSpecialty(null)}
-              >
-                <Text style={[styles.filterChipText, activeSpecialty === null && styles.filterChipTextActive]}>
-                  All
+            {isTrainer ? (
+              <View style={styles.trainerNotice}>
+                <Text style={styles.trainerNoticeText}>
+                  ✓ You're a trainer — manage your listing, orders, and messages from the Trainer
+                  Dashboard tab above.
                 </Text>
+              </View>
+            ) : signupOpen ? (
+              <View style={{ marginBottom: 16 }}>
+                <TrainerProfileForm
+                  existing={null}
+                  onCancel={() => setSignupOpen(false)}
+                  onSaved={() => {
+                    setSignupOpen(false);
+                    setSignupDone(true);
+                    setIsTrainer(true);
+                  }}
+                />
+              </View>
+            ) : (
+              <Pressable style={styles.becomeTrainerCard} onPress={() => setSignupOpen(true)}>
+                <Text style={styles.becomeTrainerTitle}>Become a Trainer</Text>
+                <Text style={styles.becomeTrainerText}>
+                  Sign up, fill in your profile, and start selling custom plans to FitFlex members.
+                </Text>
+                <Text style={styles.becomeTrainerCta}>Get started →</Text>
               </Pressable>
-              {specialties.map((s) => (
+            )}
+
+            {signupDone && (
+              <Text style={styles.successNote}>
+                ✓ Trainer profile created — open the new Trainer Dashboard tab above to set up
+                payouts and start accepting orders.
+              </Text>
+            )}
+
+            {orders.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>My Orders</Text>
+                {orders.map((order) => (
+                  <View key={order.id} style={styles.orderRow}>
+                    <View style={styles.orderInfo}>
+                      <Text style={styles.orderTrainer}>{order.trainer_display_name}</Text>
+                      <Text style={styles.orderStatus}>{STATUS_LABEL[order.status]}</Text>
+                    </View>
+                    <Text style={styles.orderPrice}>{formatPrice(order.amount_cents)}</Text>
+                  </View>
+                ))}
+              </>
+            )}
+
+            <Text style={styles.sectionTitle}>Browse Trainers</Text>
+
+            {specialties.length > 0 && (
+              <View style={styles.filterRow}>
                 <Pressable
-                  key={s}
-                  style={[styles.filterChip, activeSpecialty === s && styles.filterChipActive]}
-                  onPress={() => setActiveSpecialty(s)}
+                  style={[styles.filterChip, activeSpecialty === null && styles.filterChipActive]}
+                  onPress={() => setActiveSpecialty(null)}
                 >
-                  <Text style={[styles.filterChipText, activeSpecialty === s && styles.filterChipTextActive]}>
-                    {s}
+                  <Text style={[styles.filterChipText, activeSpecialty === null && styles.filterChipTextActive]}>
+                    All
                   </Text>
                 </Pressable>
-              ))}
-            </View>
-          )}
-        </>
-      }
-      data={filteredTrainers}
-      keyExtractor={(item) => item.id}
-      ListEmptyComponent={
-        <Text style={styles.empty}>No trainers are accepting orders yet — check back soon.</Text>
-      }
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials(item.display_name)}</Text>
-            </View>
-            <View style={styles.cardHeaderInfo}>
-              <Text style={styles.cardName}>{item.display_name}</Text>
-              {item.specialty ? <Text style={styles.cardSpecialty}>{item.specialty}</Text> : null}
-            </View>
-            <Text style={styles.cardPrice}>{formatPrice(item.price_cents)}</Text>
-          </View>
-          {item.bio ? <Text style={styles.cardBio}>{item.bio}</Text> : null}
-
-          <Pressable
-            style={styles.buyButton}
-            onPress={() => handleBuy(item.id)}
-            disabled={buyingId === item.id}
-          >
-            {buyingId === item.id ? (
-              <ActivityIndicator color="#0a0a0a" />
-            ) : (
-              <Text style={styles.buyButtonText}>Buy Custom Plan</Text>
+                {specialties.map((s) => (
+                  <Pressable
+                    key={s}
+                    style={[styles.filterChip, activeSpecialty === s && styles.filterChipActive]}
+                    onPress={() => setActiveSpecialty(s)}
+                  >
+                    <Text style={[styles.filterChipText, activeSpecialty === s && styles.filterChipTextActive]}>
+                      {s}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             )}
-          </Pressable>
-        </View>
+          </>
+        }
+        data={filteredTrainers}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          <Text style={styles.empty}>No trainers are accepting orders yet — check back soon.</Text>
+        }
+        renderItem={({ item }) => {
+          const isMe = item.user_id === myUserId;
+          return (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{initials(item.display_name)}</Text>
+                </View>
+                <View style={styles.cardHeaderInfo}>
+                  <Text style={styles.cardName}>{item.display_name}</Text>
+                  {item.specialty ? <Text style={styles.cardSpecialty}>{item.specialty}</Text> : null}
+                </View>
+                <Text style={styles.cardPrice}>{formatPrice(item.price_cents)}</Text>
+              </View>
+              {item.bio ? <Text style={styles.cardBio}>{item.bio}</Text> : null}
+
+              {isMe ? (
+                <View style={styles.ownListingBadge}>
+                  <Text style={styles.ownListingText}>This is your listing</Text>
+                </View>
+              ) : (
+                <View style={styles.actionRow}>
+                  <Pressable
+                    style={[styles.bookButton, styles.actionButton]}
+                    onPress={() => handleBuy(item.id)}
+                    disabled={buyingId === item.id}
+                  >
+                    {buyingId === item.id ? (
+                      <ActivityIndicator color="#0a0a0a" />
+                    ) : (
+                      <Text style={styles.bookButtonText}>Book This Trainer</Text>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.messageButton, styles.actionButton]}
+                    onPress={() => setChatTarget(item)}
+                  >
+                    <Text style={styles.messageButtonText}>Message</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          );
+        }}
+      />
+
+      {chatTarget && myUserId && (
+        <TrainerChatModal
+          visible={!!chatTarget}
+          onClose={() => setChatTarget(null)}
+          trainerUserId={chatTarget.user_id}
+          clientUserId={myUserId}
+          otherPartyLabel={chatTarget.display_name}
+        />
       )}
-    />
+    </>
   );
 }
 
@@ -199,6 +283,51 @@ const styles = StyleSheet.create({
   error: {
     color: dark.danger,
     marginBottom: 12,
+  },
+  becomeTrainerCard: {
+    borderWidth: 1,
+    borderColor: dark.accent,
+    backgroundColor: dark.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  becomeTrainerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: dark.text,
+  },
+  becomeTrainerText: {
+    fontSize: 13,
+    color: dark.textMuted,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  becomeTrainerCta: {
+    fontSize: 13,
+    color: dark.accent,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  trainerNotice: {
+    borderWidth: 1,
+    borderColor: dark.accentDark,
+    backgroundColor: dark.surface,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  trainerNoticeText: {
+    color: dark.text,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  successNote: {
+    color: dark.accent,
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 16,
+    lineHeight: 17,
   },
   sectionTitle: {
     fontSize: 16,
@@ -319,15 +448,48 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 19,
   },
-  buyButton: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  bookButton: {
     backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
-    marginTop: 14,
   },
-  buyButtonText: {
+  bookButtonText: {
     color: '#0a0a0a',
     fontWeight: '700',
+    fontSize: 13,
+  },
+  messageButton: {
+    borderWidth: 1,
+    borderColor: dark.accent,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  messageButtonText: {
+    color: dark.accent,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  ownListingBadge: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  ownListingText: {
+    color: dark.textFaint,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

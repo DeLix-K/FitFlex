@@ -77,7 +77,10 @@ export default function AppShell({
       .eq('id', session.user.id)
       .single()
       .then(({ data }) => setIsTrainer(!!data?.is_trainer));
-  }, [session.user.id]);
+    // Re-checked on every tab switch (not just on mount) so a user who just
+    // became a trainer via TrainersScreen sees the new tab appear as soon as
+    // they navigate, without needing a full app reload.
+  }, [session.user.id, activeTab]);
 
   const baseTabs = session.user.email === ADMIN_EMAIL ? ADMIN_TABS : BASE_TABS;
   const tabs = isTrainer

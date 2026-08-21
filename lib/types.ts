@@ -98,6 +98,8 @@ export type Challenge = {
   start_date: string;
   end_date: string;
   target_workouts: number;
+  creator_user_id: string | null;
+  target_note: string;
   created_at: string;
 };
 
@@ -107,6 +109,31 @@ export type ChallengeProgress = {
   display_name: string;
   joined_at: string;
   workouts_logged: number;
+};
+
+export type ChallengeInviteStatus = 'pending' | 'accepted' | 'declined';
+
+export type ChallengeInvite = {
+  id: string;
+  challenge_id: string;
+  inviter_user_id: string;
+  invitee_user_id: string;
+  status: ChallengeInviteStatus;
+  created_at: string;
+};
+
+export type ChallengeInviteView = ChallengeInvite & {
+  challenge_title: string;
+  inviter_display_name: string;
+};
+
+export type TrainerMessage = {
+  id: string;
+  trainer_user_id: string;
+  client_user_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
 };
 
 export type TrainerProfile = {
@@ -181,11 +208,20 @@ export type CourseLesson = {
   created_at: string;
 };
 
+export type DigitalProductCategory =
+  | 'workout_guides'
+  | 'nutrition_guides'
+  | 'training_programmes'
+  | 'transformation_plans'
+  | 'beginner_guides'
+  | 'weight_loss';
+
 export type DigitalProduct = {
   id: string;
   title: string;
   description: string;
   price_cents: number;
+  category: DigitalProductCategory;
   created_at: string;
 };
 

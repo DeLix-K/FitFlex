@@ -8,18 +8,22 @@ import {
   Text,
   View,
 } from 'react-native';
+import CreateChallengeModal from '../components/CreateChallengeModal';
+import InviteFriendsModal from '../components/InviteFriendsModal';
 import {
   fetchChallengeLeaderboard,
   fetchChallenges,
   fetchChallengeStats,
+  fetchMyChallengeInvites,
   fetchMyProgress,
   getChallengeStatus,
   joinChallenge,
   leaveChallenge,
+  respondToChallengeInvite,
 } from '../lib/challenges';
 import { supabase } from '../lib/supabase';
 import { dark } from '../lib/theme';
-import type { Challenge, ChallengeProgress } from '../lib/types';
+import type { Challenge, ChallengeInviteView, ChallengeProgress } from '../lib/types';
 
 const STATUS_LABEL: Record<string, string> = {
   active: 'Active',
@@ -48,6 +52,10 @@ export default function ChallengesScreen() {
   const [expandedBoard, setExpandedBoard] = useState<ChallengeProgress[]>([]);
   const [expandedLoading, setExpandedLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invites, setInvites] = useState<ChallengeInviteView[]>([]);
+  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [inviteTarget, setInviteTarget] = useState<Challenge | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -55,16 +63,18 @@ export default function ChallengesScreen() {
       const { data } = await supabase.auth.getUser();
       setUserId(data.user?.id ?? null);
 
-      const [list, statCounts, progress] = await Promise.all([
+      const [list, statCounts, progress, myInvites] = await Promise.all([
         fetchChallenges(),
         fetchChallengeStats(),
         fetchMyProgress(),
+        fetchMyChallengeInvites(),
       ]);
       setChallenges(list);
       setStats(statCounts);
       const progressMap: Record<string, ChallengeProgress> = {};
       for (const row of progress) progressMap[row.challenge_id] = row;
       setMyProgress(progressMap);
+      setInvites(myInvites);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -105,6 +115,19 @@ export default function ChallengesScreen() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleInviteResponse = async (invite: ChallengeInviteView, accept: boolean) => {
+    setInviteBusyId(invite.id);
+    setError(null);
+    try {
+      await respondToChallengeInvite(invite.id, accept, invite.challenge_id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInviteBusyId(null);
     }
   };
 
@@ -152,14 +175,56 @@ export default function ChallengesScreen() {
   }
 
   return (
+    <>
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
       ListHeaderComponent={
         <>
-          <Text style={styles.title}>Challenges</Text>
-          <Text style={styles.subtitle}>Join a challenge and log workouts to complete it.</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>Challenges</Text>
+              <Text style={styles.subtitle}>Join a challenge and log workouts to complete it.</Text>
+            </View>
+            <Pressable style={styles.createButton} onPress={() => setCreateOpen(true)}>
+              <Text style={styles.createButtonText}>+ Create</Text>
+            </Pressable>
+          </View>
+
+          {invites.length > 0 && (
+            <View style={styles.invitesSection}>
+              <Text style={styles.sectionTitle}>Invites</Text>
+              {invites.map((invite) => (
+                <View key={invite.id} style={styles.inviteRow}>
+                  <Text style={styles.inviteText}>
+                    <Text style={styles.inviteName}>{invite.inviter_display_name}</Text> invited you to{' '}
+                    <Text style={styles.inviteName}>{invite.challenge_title}</Text>
+                  </Text>
+                  <View style={styles.inviteActions}>
+                    <Pressable
+                      style={styles.inviteAccept}
+                      onPress={() => handleInviteResponse(invite, true)}
+                      disabled={inviteBusyId === invite.id}
+                    >
+                      {inviteBusyId === invite.id ? (
+                        <ActivityIndicator size="small" color="#0a0a0a" />
+                      ) : (
+                        <Text style={styles.inviteAcceptText}>Accept</Text>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      style={styles.inviteDecline}
+                      onPress={() => handleInviteResponse(invite, false)}
+                      disabled={inviteBusyId === invite.id}
+                    >
+                      <Text style={styles.inviteDeclineText}>Decline</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
           <View style={styles.tabRow}>
             {TABS.map((t) => (
@@ -204,6 +269,9 @@ export default function ChallengesScreen() {
                 </View>
               </View>
               <Text style={styles.cardDescription}>{challenge.description}</Text>
+              {challenge.target_note ? (
+                <Text style={styles.cardGoalNote}>{challenge.target_note}</Text>
+              ) : null}
               <Text style={styles.cardMeta}>
                 {challenge.start_date} → {challenge.end_date} · 🔥 {stats[challenge.id] ?? 0} participants
               </Text>
@@ -223,9 +291,16 @@ export default function ChallengesScreen() {
             </Pressable>
 
             <View style={styles.cardFooter}>
-              <Pressable onPress={() => toggleExpanded(challenge.id)}>
-                <Text style={styles.linkText}>{expanded ? 'Hide leaderboard' : 'View leaderboard'}</Text>
-              </Pressable>
+              <View style={styles.cardFooterLinks}>
+                <Pressable onPress={() => toggleExpanded(challenge.id)}>
+                  <Text style={styles.linkText}>{expanded ? 'Hide leaderboard' : 'View leaderboard'}</Text>
+                </Pressable>
+                {joined && (
+                  <Pressable onPress={() => setInviteTarget(challenge)}>
+                    <Text style={styles.linkText}>Invite Friends</Text>
+                  </Pressable>
+                )}
+              </View>
 
               {joined ? (
                 <Pressable
@@ -281,6 +356,25 @@ export default function ChallengesScreen() {
         );
       }}
     />
+
+    <CreateChallengeModal
+      visible={createOpen}
+      onClose={() => setCreateOpen(false)}
+      onCreated={() => {
+        setCreateOpen(false);
+        load();
+      }}
+    />
+
+    {inviteTarget && (
+      <InviteFriendsModal
+        visible={!!inviteTarget}
+        onClose={() => setInviteTarget(null)}
+        challengeId={inviteTarget.id}
+        challengeTitle={inviteTarget.title}
+      />
+    )}
+    </>
   );
 }
 
@@ -300,6 +394,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  createButton: {
+    backgroundColor: dark.accent,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  createButtonText: {
+    color: '#0a0a0a',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   title: {
     color: dark.text,
     fontSize: 22,
@@ -310,6 +424,62 @@ const styles = StyleSheet.create({
     color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
+  },
+  invitesSection: {
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: dark.text,
+    marginBottom: 8,
+  },
+  inviteRow: {
+    borderWidth: 1,
+    borderColor: dark.accent,
+    backgroundColor: dark.surface,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  inviteText: {
+    fontSize: 13,
+    color: dark.textMuted,
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  inviteName: {
+    color: dark.text,
+    fontWeight: '700',
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  inviteAccept: {
+    flex: 1,
+    backgroundColor: dark.accent,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  inviteAcceptText: {
+    color: '#0a0a0a',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  inviteDecline: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  inviteDeclineText: {
+    color: dark.textMuted,
+    fontWeight: '700',
+    fontSize: 12,
   },
   tabRow: {
     flexDirection: 'row',
@@ -386,6 +556,12 @@ const styles = StyleSheet.create({
     color: dark.textMuted,
     marginBottom: 6,
   },
+  cardGoalNote: {
+    fontSize: 12,
+    color: dark.accent,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
   cardMeta: {
     fontSize: 12,
     color: dark.textFaint,
@@ -415,6 +591,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 14,
+  },
+  cardFooterLinks: {
+    flexDirection: 'row',
+    gap: 16,
   },
   linkText: {
     fontSize: 13,

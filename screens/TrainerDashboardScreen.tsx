@@ -9,20 +9,28 @@ import {
   View,
 } from 'react-native';
 import ExercisePicker from '../components/ExercisePicker';
+import TrainerChatModal from '../components/TrainerChatModal';
+import TrainerProfileForm from '../components/TrainerProfileForm';
 import {
   deliverPlan,
   fetchMyOrdersAsTrainer,
   fetchMyTrainerProfile,
   startTrainerOnboarding,
 } from '../lib/trainerDashboard';
-import { colors } from '../lib/theme';
+import { fetchMyClientThreads, type ClientThread } from '../lib/trainerMessages';
+import { supabase } from '../lib/supabase';
+import { dark } from '../lib/theme';
 import type { Exercise, TrainerOrderView, TrainerProfile } from '../lib/types';
 
 type DraftItem = { exerciseId: string; name: string; sets: string; reps: string; notes: string };
-type Mode = { mode: 'list' } | { mode: 'build'; order: TrainerOrderView };
+type Mode = { mode: 'list' } | { mode: 'build'; order: TrainerOrderView } | { mode: 'edit' };
 
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function BuildPlanView({
@@ -102,12 +110,14 @@ function BuildPlanView({
       <TextInput
         style={styles.input}
         placeholder="Plan name (e.g. 8-Week Strength Program)"
+        placeholderTextColor={dark.textFaint}
         value={planName}
         onChangeText={setPlanName}
       />
       <TextInput
         style={styles.input}
         placeholder="Description (optional)"
+        placeholderTextColor={dark.textFaint}
         value={planDescription}
         onChangeText={setPlanDescription}
       />
@@ -132,6 +142,7 @@ function BuildPlanView({
               <TextInput
                 style={styles.fieldInput}
                 placeholder="Sets"
+                placeholderTextColor={dark.textFaint}
                 keyboardType="number-pad"
                 value={item.sets}
                 onChangeText={(text) => updateItem(index, 'sets', text)}
@@ -139,6 +150,7 @@ function BuildPlanView({
               <TextInput
                 style={styles.fieldInput}
                 placeholder="Reps"
+                placeholderTextColor={dark.textFaint}
                 keyboardType="number-pad"
                 value={item.reps}
                 onChangeText={(text) => updateItem(index, 'reps', text)}
@@ -147,6 +159,7 @@ function BuildPlanView({
             <TextInput
               style={styles.notesInput}
               placeholder="Notes (optional)"
+              placeholderTextColor={dark.textFaint}
               value={item.notes}
               onChangeText={(text) => updateItem(index, 'notes', text)}
             />
@@ -160,7 +173,7 @@ function BuildPlanView({
 
       <Pressable style={styles.deliverButton} onPress={handleDeliver} disabled={delivering}>
         {delivering ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color="#0a0a0a" />
         ) : (
           <Text style={styles.deliverButtonText}>Deliver Plan</Text>
         )}
@@ -179,6 +192,8 @@ export default function TrainerDashboardScreen() {
   const [mode, setMode] = useState<Mode>({ mode: 'list' });
   const [profile, setProfile] = useState<TrainerProfile | null>(null);
   const [orders, setOrders] = useState<TrainerOrderView[]>([]);
+  const [threads, setThreads] = useState<ClientThread[]>([]);
+  const [chatClient, setChatClient] = useState<ClientThread | null>(null);
   const [loading, setLoading] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,12 +201,14 @@ export default function TrainerDashboardScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [trainerProfile, myOrders] = await Promise.all([
+      const [trainerProfile, myOrders, myThreads] = await Promise.all([
         fetchMyTrainerProfile(),
         fetchMyOrdersAsTrainer(),
+        fetchMyClientThreads(),
       ]);
       setProfile(trainerProfile);
       setOrders(myOrders);
+      setThreads(myThreads);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -229,17 +246,31 @@ export default function TrainerDashboardScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
 
-  if (!profile) {
+  if (!profile || mode.mode === 'edit') {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.empty}>
-          No trainer profile is set up for your account yet — reach out to the admin.
-        </Text>
+      <View style={[styles.container, styles.content]}>
+        {mode.mode === 'edit' && (
+          <Pressable onPress={() => setMode({ mode: 'list' })}>
+            <Text style={styles.back}>{'< Trainer Dashboard'}</Text>
+          </Pressable>
+        )}
+        <Text style={styles.title}>{profile ? 'Edit Trainer Profile' : 'Become a Trainer'}</Text>
+        {!profile && (
+          <Text style={styles.subtitle}>
+            Fill in your profile to start listing custom workout plans for sale.
+          </Text>
+        )}
+        {error && <Text style={styles.error}>{error}</Text>}
+        <TrainerProfileForm
+          existing={profile}
+          onCancel={mode.mode === 'edit' ? () => setMode({ mode: 'list' }) : undefined}
+          onSaved={() => setMode({ mode: 'list' })}
+        />
       </View>
     );
   }
@@ -248,78 +279,113 @@ export default function TrainerDashboardScreen() {
   const fulfilledOrders = orders.filter((o) => o.status === 'fulfilled');
 
   return (
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      ListHeaderComponent={
-        <>
-          <Text style={styles.title}>Trainer Dashboard</Text>
-          {error && <Text style={styles.error}>{error}</Text>}
-
-          {!profile.payouts_enabled ? (
-            <View style={styles.payoutCard}>
-              <Text style={styles.payoutText}>
-                Set up payouts with Stripe to start accepting orders.
-              </Text>
-              <Pressable style={styles.onboardButton} onPress={handleOnboard} disabled={onboarding}>
-                {onboarding ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.onboardButtonText}>Set Up Payouts</Text>
-                )}
+    <>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <>
+            <View style={styles.headerRow}>
+              <Text style={styles.title}>Trainer Dashboard</Text>
+              <Pressable onPress={() => setMode({ mode: 'edit' })}>
+                <Text style={styles.editLink}>Edit Profile</Text>
               </Pressable>
             </View>
-          ) : (
-            <View style={styles.payoutCardEnabled}>
-              <Text style={styles.payoutTextEnabled}>✓ Payouts enabled</Text>
-            </View>
-          )}
+            {error && <Text style={styles.error}>{error}</Text>}
 
-          <Text style={styles.sectionTitle}>
-            Orders to Fulfill {readyOrders.length > 0 ? `(${readyOrders.length})` : ''}
-          </Text>
-        </>
-      }
-      data={readyOrders}
-      keyExtractor={(item) => item.id}
-      ListEmptyComponent={<Text style={styles.empty}>No orders waiting right now.</Text>}
-      renderItem={({ item }) => (
-        <View style={styles.orderCard}>
-          <View>
-            <Text style={styles.orderClient}>{item.client_display_name}</Text>
-            <Text style={styles.orderPrice}>{formatPrice(item.amount_cents)}</Text>
-          </View>
-          <Pressable
-            style={styles.buildButton}
-            onPress={() => setMode({ mode: 'build', order: item })}
-          >
-            <Text style={styles.buildButtonText}>Build Plan</Text>
-          </Pressable>
-        </View>
-      )}
-      ListFooterComponent={
-        fulfilledOrders.length > 0 ? (
-          <>
-            <Text style={styles.sectionTitle}>Delivered ({fulfilledOrders.length})</Text>
-            {fulfilledOrders.map((item) => (
-              <View key={item.id} style={styles.deliveredRow}>
-                <Text style={styles.orderClient}>{item.client_display_name}</Text>
-                <Text style={styles.deliveredLabel}>✓ Delivered</Text>
+            {!profile.payouts_enabled ? (
+              <View style={styles.payoutCard}>
+                <Text style={styles.payoutText}>
+                  Set up payouts with Stripe to start accepting orders.
+                </Text>
+                <Pressable style={styles.onboardButton} onPress={handleOnboard} disabled={onboarding}>
+                  {onboarding ? (
+                    <ActivityIndicator color="#0a0a0a" />
+                  ) : (
+                    <Text style={styles.onboardButtonText}>Set Up Payouts</Text>
+                  )}
+                </Pressable>
               </View>
-            ))}
+            ) : (
+              <View style={styles.payoutCardEnabled}>
+                <Text style={styles.payoutTextEnabled}>✓ Payouts enabled</Text>
+              </View>
+            )}
+
+            <Text style={styles.sectionTitle}>
+              Messages {threads.length > 0 ? `(${threads.length})` : ''}
+            </Text>
+            {threads.length === 0 ? (
+              <Text style={styles.empty}>No messages from clients yet.</Text>
+            ) : (
+              threads.map((t) => (
+                <Pressable key={t.clientUserId} style={styles.threadRow} onPress={() => setChatClient(t)}>
+                  <View style={styles.threadInfo}>
+                    <Text style={styles.threadName}>{t.clientDisplayName}</Text>
+                    <Text style={styles.threadPreview} numberOfLines={1}>{t.lastMessage}</Text>
+                  </View>
+                  <Text style={styles.threadWhen}>{formatWhen(t.lastAt)}</Text>
+                </Pressable>
+              ))
+            )}
+
+            <Text style={styles.sectionTitle}>
+              Orders to Fulfill {readyOrders.length > 0 ? `(${readyOrders.length})` : ''}
+            </Text>
           </>
-        ) : null
-      }
-    />
+        }
+        data={readyOrders}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={<Text style={styles.empty}>No orders waiting right now.</Text>}
+        renderItem={({ item }) => (
+          <View style={styles.orderCard}>
+            <View>
+              <Text style={styles.orderClient}>{item.client_display_name}</Text>
+              <Text style={styles.orderPrice}>{formatPrice(item.amount_cents)}</Text>
+            </View>
+            <Pressable
+              style={styles.buildButton}
+              onPress={() => setMode({ mode: 'build', order: item })}
+            >
+              <Text style={styles.buildButtonText}>Build Plan</Text>
+            </Pressable>
+          </View>
+        )}
+        ListFooterComponent={
+          fulfilledOrders.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Delivered ({fulfilledOrders.length})</Text>
+              {fulfilledOrders.map((item) => (
+                <View key={item.id} style={styles.deliveredRow}>
+                  <Text style={styles.orderClient}>{item.client_display_name}</Text>
+                  <Text style={styles.deliveredLabel}>✓ Delivered</Text>
+                </View>
+              ))}
+            </>
+          ) : null
+        }
+      />
+
+      {chatClient && (
+        <TrainerChatModal
+          visible={!!chatClient}
+          onClose={() => setChatClient(null)}
+          trainerUserId={profile.user_id}
+          clientUserId={chatClient.clientUserId}
+          otherPartyLabel={chatClient.clientDisplayName}
+        />
+      )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
+    backgroundColor: dark.background,
   },
   content: {
+    paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 40,
   },
@@ -327,71 +393,123 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    backgroundColor: dark.background,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: dark.textFaint,
+    marginTop: 4,
     marginBottom: 16,
   },
+  editLink: {
+    color: dark.accent,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   back: {
-    color: colors.primary,
+    color: dark.accent,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 16,
     marginBottom: 12,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
   empty: {
-    color: colors.textFaint,
+    color: dark.textFaint,
     textAlign: 'center',
     marginTop: 12,
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
+    color: dark.text,
     marginTop: 16,
     marginBottom: 8,
   },
   payoutCard: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 16,
   },
   payoutText: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginBottom: 12,
   },
   onboardButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
   },
   onboardButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
   },
   payoutCardEnabled: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: dark.surface,
+    borderWidth: 1,
+    borderColor: dark.accentDark,
     borderRadius: 12,
     padding: 14,
   },
   payoutTextEnabled: {
-    color: colors.success,
+    color: dark.accent,
     fontWeight: '700',
+  },
+  threadRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  threadInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  threadName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: dark.text,
+  },
+  threadPreview: {
+    fontSize: 12,
+    color: dark.textMuted,
+    marginTop: 2,
+  },
+  threadWhen: {
+    fontSize: 11,
+    color: dark.textFaint,
   },
   orderCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
@@ -399,20 +517,21 @@ const styles = StyleSheet.create({
   orderClient: {
     fontSize: 15,
     fontWeight: '700',
+    color: dark.text,
   },
   orderPrice: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 2,
   },
   buildButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
   buildButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -421,19 +540,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
   },
   deliveredLabel: {
-    color: colors.success,
+    color: dark.accent,
     fontSize: 12,
     fontWeight: '700',
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    color: dark.text,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
@@ -444,7 +566,8 @@ const styles = StyleSheet.create({
   },
   itemRow: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
@@ -458,9 +581,10 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 15,
     fontWeight: '700',
+    color: dark.text,
   },
   remove: {
-    color: colors.danger,
+    color: dark.danger,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -471,7 +595,9 @@ const styles = StyleSheet.create({
   fieldInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.text,
     borderRadius: 6,
     paddingVertical: 8,
     paddingHorizontal: 10,
@@ -480,32 +606,35 @@ const styles = StyleSheet.create({
   notesInput: {
     marginTop: 10,
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.text,
     borderRadius: 6,
     paddingVertical: 8,
     paddingHorizontal: 10,
     fontSize: 13,
   },
   addButton: {
-    backgroundColor: colors.backgroundMuted,
+    borderWidth: 1,
+    borderColor: dark.border,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginBottom: 12,
   },
   addButtonText: {
-    color: colors.text,
+    color: dark.text,
     fontWeight: '700',
   },
   deliverButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 40,
   },
   deliverButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
   },
 });
