@@ -38,7 +38,8 @@ export type AiHistoryKind =
   | 'nutrition_search'
   | 'exercise_explanation'
   | 'coach_chat'
-  | 'mood_reflection';
+  | 'mood_reflection'
+  | 'sleep_insight';
 
 export type AiHistoryEntry = {
   id: string;
@@ -249,4 +250,8 @@ export type SleepLog = {
   source: SleepSource;
   created_at: string;
   updated_at: string;
+  deep_minutes: number | null;
+  rem_minutes: number | null;
+  light_minutes: number | null;
+  awake_minutes: number | null;
 };

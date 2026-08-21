@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,8 +9,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { saveHistoryEntry } from '../lib/aiHistory';
+import { askClaude, buildSleepInsightPrompt } from '../lib/claude';
 import { fetchSleepHistory, logSleepManually, syncOuraSleep, yesterdayLocalDate } from '../lib/sleep';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { SleepLog } from '../lib/types';
 
 function formatDuration(minutes: number | null): string {
@@ -18,6 +20,33 @@ function formatDuration(minutes: number | null): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h}h ${m}m`;
+}
+
+function scoreLabel(score: number | null): string {
+  if (score == null) return 'Log sleep to see your score';
+  if (score >= 85) return 'Great recovery!';
+  if (score >= 70) return 'Good recovery';
+  if (score >= 50) return 'Fair recovery';
+  return 'Poor recovery — rest up';
+}
+
+function bedtimeConsistency(nights: SleepLog[]): string {
+  const times = nights
+    .map((n) => n.bedtime)
+    .filter((b): b is string => !!b)
+    .map((b) => {
+      const d = new Date(b);
+      let hour = d.getHours() + d.getMinutes() / 60;
+      if (hour < 12) hour += 24; // normalize late-night bedtimes past midnight
+      return hour;
+    });
+  if (times.length < 2) return '—';
+  const mean = times.reduce((a, b) => a + b, 0) / times.length;
+  const variance = times.reduce((sum, t) => sum + (t - mean) ** 2, 0) / times.length;
+  const stdDevMinutes = Math.sqrt(variance) * 60;
+  if (stdDevMinutes <= 20) return 'Very consistent';
+  if (stdDevMinutes <= 45) return 'Fairly consistent';
+  return 'Irregular';
 }
 
 export default function SleepScreen() {
@@ -31,6 +60,8 @@ export default function SleepScreen() {
   const [quality, setQuality] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [insight, setInsight] = useState<string | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -92,10 +123,37 @@ export default function SleepScreen() {
     }
   };
 
+  const last7 = useMemo(() => history.slice(0, 7), [history]);
+  const latest = last7[0];
+
+  const handleGetInsight = async () => {
+    setInsightLoading(true);
+    setError(null);
+    try {
+      const prompt = buildSleepInsightPrompt(
+        last7.map((n) => ({
+          date: n.sleep_date,
+          durationMinutes: n.duration_minutes,
+          bedtime: n.bedtime,
+          score: n.sleep_score,
+        }))
+      );
+      const reply = await askClaude(prompt);
+      setInsight(reply);
+      saveHistoryEntry('sleep_insight', reply);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInsightLoading(false);
+    }
+  };
+
+  const maxDuration = Math.max(60, ...last7.map((n) => n.duration_minutes ?? 0));
+
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator />
+        <ActivityIndicator color={dark.accent} />
       </View>
     );
   }
@@ -104,7 +162,7 @@ export default function SleepScreen() {
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
       ListHeaderComponent={
         <>
           <Text style={styles.title}>Sleep</Text>
@@ -114,6 +172,83 @@ export default function SleepScreen() {
           {syncNote && <Text style={styles.note}>{syncNote}</Text>}
           {error && <Text style={styles.error}>{error}</Text>}
 
+          <View style={styles.heroCard}>
+            <Text style={styles.heroEmoji}>😴</Text>
+            <Text style={styles.heroScore}>
+              {latest?.sleep_score != null ? latest.sleep_score : formatDuration(latest?.duration_minutes ?? null)}
+            </Text>
+            <Text style={styles.heroLabel}>{scoreLabel(latest?.sleep_score ?? null)}</Text>
+          </View>
+
+          {latest && (
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricBox}>
+                <Text style={styles.metricValue}>{formatDuration(latest.duration_minutes)}</Text>
+                <Text style={styles.metricLabel}>Total sleep</Text>
+              </View>
+              <View style={styles.metricBox}>
+                <Text style={styles.metricValue}>{formatDuration(latest.deep_minutes)}</Text>
+                <Text style={styles.metricLabel}>Deep</Text>
+              </View>
+              <View style={styles.metricBox}>
+                <Text style={styles.metricValue}>{formatDuration(latest.rem_minutes)}</Text>
+                <Text style={styles.metricLabel}>REM</Text>
+              </View>
+              <View style={styles.metricBox}>
+                <Text style={styles.metricValue}>{formatDuration(latest.light_minutes)}</Text>
+                <Text style={styles.metricLabel}>Light</Text>
+              </View>
+              <View style={styles.metricBox}>
+                <Text style={styles.metricValue}>{formatDuration(latest.awake_minutes)}</Text>
+                <Text style={styles.metricLabel}>Awake</Text>
+              </View>
+              <View style={styles.metricBox}>
+                <Text style={styles.metricValue}>{bedtimeConsistency(last7)}</Text>
+                <Text style={styles.metricLabel}>Consistency</Text>
+              </View>
+            </View>
+          )}
+
+          {last7.length > 1 && (
+            <>
+              <Text style={styles.sectionTitle}>7-Day Trend</Text>
+              <View style={styles.chartRow}>
+                {[...last7].reverse().map((n) => (
+                  <View key={n.id} style={styles.chartBarWrap}>
+                    <View
+                      style={[
+                        styles.chartBar,
+                        { height: Math.max(6, ((n.duration_minutes ?? 0) / maxDuration) * 90) },
+                      ]}
+                    />
+                    <Text style={styles.chartBarLabel}>
+                      {new Date(n.sleep_date).toLocaleDateString(undefined, { weekday: 'narrow' })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          <View style={styles.insightCard}>
+            {insight ? (
+              <Text style={styles.insightText}>{insight}</Text>
+            ) : (
+              <Text style={styles.insightPlaceholder}>
+                Get a personalized insight based on your recent sleep patterns.
+              </Text>
+            )}
+            <Pressable style={styles.insightButton} onPress={handleGetInsight} disabled={insightLoading}>
+              {insightLoading ? (
+                <ActivityIndicator color="#0a0a0a" size="small" />
+              ) : (
+                <Text style={styles.insightButtonText}>
+                  {insight ? 'Refresh Insight' : '✨ Get AI Insight'}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+
           {formVisible ? (
             <View style={styles.form}>
               <Text style={styles.formLabel}>Date</Text>
@@ -122,6 +257,7 @@ export default function SleepScreen() {
                 value={dateInput}
                 onChangeText={setDateInput}
                 placeholder="YYYY-MM-DD"
+                placeholderTextColor={dark.textFaint}
               />
               <Text style={styles.formLabel}>Hours slept</Text>
               <TextInput
@@ -129,6 +265,7 @@ export default function SleepScreen() {
                 value={hoursInput}
                 onChangeText={setHoursInput}
                 placeholder="e.g. 7.5"
+                placeholderTextColor={dark.textFaint}
                 keyboardType="decimal-pad"
               />
               <Text style={styles.formLabel}>Quality (optional)</Text>
@@ -150,6 +287,7 @@ export default function SleepScreen() {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Notes (optional)"
+                placeholderTextColor={dark.textFaint}
               />
               <View style={styles.formButtons}>
                 <Pressable style={styles.cancelButton} onPress={() => setFormVisible(false)}>
@@ -157,7 +295,7 @@ export default function SleepScreen() {
                 </Pressable>
                 <Pressable style={styles.saveButton} onPress={handleSave} disabled={saving}>
                   {saving ? (
-                    <ActivityIndicator color="#fff" size="small" />
+                    <ActivityIndicator color="#0a0a0a" size="small" />
                   ) : (
                     <Text style={styles.saveButtonText}>Save</Text>
                   )}
@@ -200,6 +338,7 @@ export default function SleepScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -208,55 +347,172 @@ const styles = StyleSheet.create({
   },
   centered: {
     flex: 1,
+    backgroundColor: dark.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
+    color: dark.text,
     fontSize: 22,
     fontWeight: '700',
   },
   subtitle: {
     fontSize: 13,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 12,
   },
   note: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginBottom: 12,
   },
   error: {
-    color: colors.danger,
+    color: dark.danger,
     marginBottom: 12,
   },
+  heroCard: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 20,
+    paddingVertical: 24,
+    marginBottom: 12,
+  },
+  heroEmoji: {
+    fontSize: 32,
+    marginBottom: 4,
+  },
+  heroScore: {
+    color: dark.text,
+    fontSize: 36,
+    fontWeight: '800',
+  },
+  heroLabel: {
+    color: dark.accent,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  metricBox: {
+    width: '31%',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 12,
+    padding: 12,
+  },
+  metricValue: {
+    color: dark.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  metricLabel: {
+    color: dark.textFaint,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  sectionTitle: {
+    color: dark.text,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    height: 110,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 12,
+    padding: 12,
+  },
+  chartBarWrap: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartBar: {
+    width: 14,
+    backgroundColor: dark.accent,
+    borderRadius: 4,
+  },
+  chartBarLabel: {
+    color: dark.textFaint,
+    fontSize: 10,
+    marginTop: 6,
+  },
+  insightCard: {
+    borderWidth: 1,
+    borderColor: dark.accentDark,
+    backgroundColor: dark.surfaceElevated,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  insightText: {
+    color: dark.text,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  insightPlaceholder: {
+    color: dark.textMuted,
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  insightButton: {
+    backgroundColor: dark.accent,
+    borderRadius: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  insightButtonText: {
+    color: '#0a0a0a',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   logButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.surface,
+    borderWidth: 1,
+    borderColor: dark.border,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
     marginBottom: 16,
   },
   logButtonText: {
-    color: '#fff',
+    color: dark.accent,
     fontWeight: '700',
   },
   form: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
   },
   formLabel: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginBottom: 4,
     marginTop: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.text,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -271,21 +527,21 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: colors.borderInput,
+    borderColor: dark.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   qualityDotSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
   },
   qualityDotText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.text,
+    color: dark.text,
   },
   qualityDotTextSelected: {
-    color: '#fff',
+    color: '#0a0a0a',
   },
   formButtons: {
     flexDirection: 'row',
@@ -298,11 +554,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   cancelButtonText: {
-    color: colors.textMuted,
+    color: dark.textMuted,
     fontWeight: '600',
   },
   saveButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,
@@ -310,16 +566,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
   },
   empty: {
-    color: colors.textFaint,
+    color: dark.textFaint,
     textAlign: 'center',
     marginTop: 12,
   },
@@ -328,7 +579,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
@@ -337,10 +589,11 @@ const styles = StyleSheet.create({
   rowDate: {
     fontSize: 14,
     fontWeight: '700',
+    color: dark.text,
   },
   rowSource: {
     fontSize: 11,
-    color: colors.textFaint,
+    color: dark.textFaint,
     marginTop: 2,
   },
   rowRight: {
@@ -349,11 +602,11 @@ const styles = StyleSheet.create({
   rowDuration: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.primary,
+    color: dark.accent,
   },
   rowScore: {
     fontSize: 11,
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 2,
   },
 });

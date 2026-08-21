@@ -15,6 +15,7 @@ const FILTERS: { label: string; value: AiHistoryKind | 'all' }[] = [
   { label: 'All', value: 'all' },
   { label: 'Coach', value: 'coach_chat' },
   { label: 'Wellness', value: 'mood_reflection' },
+  { label: 'Sleep', value: 'sleep_insight' },
   { label: 'Exercises', value: 'exercise_explanation' },
   { label: 'Equipment', value: 'equipment_scan' },
   { label: 'Food', value: 'food_scan' },
@@ -24,6 +25,7 @@ const FILTERS: { label: string; value: AiHistoryKind | 'all' }[] = [
 const KIND_LABELS: Record<AiHistoryKind, string> = {
   coach_chat: 'AI Coach',
   mood_reflection: 'Wellness',
+  sleep_insight: 'Sleep',
   exercise_explanation: 'Exercise Explanation',
   equipment_scan: 'Equipment Scan',
   food_scan: 'Food Scan',
@@ -33,6 +35,7 @@ const KIND_LABELS: Record<AiHistoryKind, string> = {
 const KIND_COLORS: Record<AiHistoryKind, string> = {
   coach_chat: '#0891b2',
   mood_reflection: '#db2777',
+  sleep_insight: '#4f46e5',
   exercise_explanation: '#7c3aed',
   equipment_scan: '#2563eb',
   food_scan: '#16a34a',

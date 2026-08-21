@@ -99,6 +99,31 @@ export function buildWellnessReflectionPrompt(mood: number, notes: string): stri
   );
 }
 
+export function buildSleepInsightPrompt(
+  nights: { date: string; durationMinutes: number | null; bedtime: string | null; score: number | null }[]
+): string {
+  const lines = nights
+    .map((n) => {
+      const hours = n.durationMinutes != null ? `${(n.durationMinutes / 60).toFixed(1)}h` : 'no duration logged';
+      const bedtimeStr = n.bedtime
+        ? new Date(n.bedtime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        : 'unknown bedtime';
+      const scoreStr = n.score != null ? `, score ${n.score}` : '';
+      return `${n.date}: ${hours}, bedtime ${bedtimeStr}${scoreStr}`;
+    })
+    .join('\n');
+
+  return (
+    `You are a sleep and recovery coach inside a fitness app. Here is a user's sleep log for ` +
+    `the last several nights (most recent last):\n${lines}\n\n` +
+    'Write a short, specific insight (2-4 sentences): note any real pattern you can see in this ' +
+    'data (e.g. a link between bedtime and duration, or a trend), and give one concrete, ' +
+    'actionable suggestion. If there is not enough data for a real pattern, say so honestly ' +
+    'instead of inventing one, and suggest logging a few more nights. No markdown, no headers, ' +
+    'plain conversational sentences.'
+  );
+}
+
 export function buildExerciseExplanationPrompt(exercise: {
   name: string;
   category: string;

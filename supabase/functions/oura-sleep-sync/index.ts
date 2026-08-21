@@ -164,6 +164,10 @@ Deno.serve(async (req) => {
         total_sleep_duration?: number;
         bedtime_start?: string;
         bedtime_end?: string;
+        deep_sleep_duration?: number;
+        rem_sleep_duration?: number;
+        light_sleep_duration?: number;
+        awake_time?: number;
       }) => ({
         user_id: user.id,
         sleep_date: record.day,
@@ -173,6 +177,10 @@ Deno.serve(async (req) => {
         bedtime: record.bedtime_start ?? null,
         wake_time: record.bedtime_end ?? null,
         sleep_score: scoresByDay.get(record.day) ?? null,
+        deep_minutes: record.deep_sleep_duration != null ? Math.round(record.deep_sleep_duration / 60) : null,
+        rem_minutes: record.rem_sleep_duration != null ? Math.round(record.rem_sleep_duration / 60) : null,
+        light_minutes: record.light_sleep_duration != null ? Math.round(record.light_sleep_duration / 60) : null,
+        awake_minutes: record.awake_time != null ? Math.round(record.awake_time / 60) : null,
         source: 'oura',
       }));
 

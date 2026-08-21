@@ -106,7 +106,7 @@ create trigger workout_plans_set_updated_at
 create table if not exists ai_history (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  kind text not null check (kind in ('equipment_scan', 'food_scan', 'nutrition_search', 'exercise_explanation', 'coach_chat', 'mood_reflection')),
+  kind text not null check (kind in ('equipment_scan', 'food_scan', 'nutrition_search', 'exercise_explanation', 'coach_chat', 'mood_reflection', 'sleep_insight')),
   query text,
   result text not null,
   created_at timestamptz not null default now()
@@ -443,6 +443,12 @@ create table if not exists sleep_logs (
   source text not null default 'manual' check (source in ('manual', 'oura')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  -- Stage breakdown: only ever populated for source = 'oura' (a device
+  -- measurement, not something a user can reasonably self-report).
+  deep_minutes int,
+  rem_minutes int,
+  light_minutes int,
+  awake_minutes int,
   unique (user_id, sleep_date)
 );
 
