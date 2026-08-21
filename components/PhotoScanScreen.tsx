@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -14,7 +14,7 @@ import AiUsageIndicator from './AiUsageIndicator';
 import { useAiGate } from '../hooks/useAiGate';
 import { saveHistoryEntry } from '../lib/aiHistory';
 import { askClaude } from '../lib/claude';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { AiHistoryKind } from '../lib/types';
 
 const MEDIA_TYPE_TO_MIME: Record<string, string> = {
@@ -36,12 +36,14 @@ export default function PhotoScanScreen({
   prompt,
   loadingLabel,
   historyKind,
+  renderAfterResult,
 }: {
   title: string;
   subtitle: string;
   prompt: string;
   loadingLabel: string;
   historyKind: AiHistoryKind;
+  renderAfterResult?: (result: string) => ReactNode;
 }) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -130,7 +132,7 @@ export default function PhotoScanScreen({
 
       {loading && (
         <View style={styles.loadingRow}>
-          <ActivityIndicator />
+          <ActivityIndicator color={dark.accent} />
           <Text style={styles.loadingText}>{loadingLabel}</Text>
         </View>
       )}
@@ -142,6 +144,8 @@ export default function PhotoScanScreen({
           <Text style={styles.resultText}>{result}</Text>
         </View>
       )}
+
+      {result && renderAfterResult?.(result)}
     </ScrollView>
   );
 }
@@ -149,6 +153,7 @@ export default function PhotoScanScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -158,10 +163,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
   },
   subtitle: {
     fontSize: 13,
-    color: '#888',
+    color: dark.textFaint,
     marginTop: 4,
     marginBottom: 16,
     lineHeight: 18,
@@ -172,13 +178,13 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
   },
   buttonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 13,
     textAlign: 'center',
@@ -188,7 +194,7 @@ const styles = StyleSheet.create({
     aspectRatio: 4 / 3,
     borderRadius: 12,
     marginTop: 16,
-    backgroundColor: '#f1f1f1',
+    backgroundColor: dark.surfaceElevated,
   },
   loadingRow: {
     flexDirection: 'row',
@@ -198,22 +204,23 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 13,
-    color: '#666',
+    color: dark.textMuted,
   },
   error: {
-    color: '#dc2626',
+    color: dark.danger,
     marginTop: 16,
   },
   resultBox: {
     marginTop: 16,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 16,
   },
   resultText: {
     fontSize: 14,
-    color: '#333',
+    color: dark.text,
     lineHeight: 21,
   },
 });

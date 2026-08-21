@@ -36,10 +36,11 @@ export async function askClaudeChat(messages: ChatMessage[], system?: string): P
 }
 
 export const EQUIPMENT_SCAN_PROMPT =
-  'This photo shows a piece of gym or exercise equipment. Identify what it is, then explain in ' +
-  'plain sentences: what it is used for, how to use it safely with correct form, and one common ' +
-  'mistake beginners make with it. If the photo does not clearly show exercise equipment, say so ' +
-  "plainly instead of guessing. Keep the whole reply under 150 words, no markdown formatting.";
+  'This photo shows a piece of gym or exercise equipment. Identify what it is, then cover each ' +
+  'of these briefly in plain sentences: how to use it and correct setup, 2-3 exercises you can ' +
+  'do on it, one key safety tip, and a beginner instruction to get started. If the photo does ' +
+  'not clearly show exercise equipment, say so plainly instead of guessing. Keep the whole reply ' +
+  'under 180 words, no markdown formatting.';
 
 export const FOOD_SCAN_PROMPT =
   'This photo shows a meal or snack. Identify what food(s) you see, then give an estimated ' +

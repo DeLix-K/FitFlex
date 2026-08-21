@@ -21,6 +21,22 @@ export type WorkoutPlan = {
   updated_at: string;
 };
 
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export type MealLog = {
+  id: string;
+  user_id: string;
+  log_date: string;
+  meal_type: MealType;
+  description: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  source: 'manual' | 'scan' | 'search';
+  created_at: string;
+};
+
 export type PlanScheduleEntry = {
   id: string;
   user_id: string;

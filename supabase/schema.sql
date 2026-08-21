@@ -142,6 +142,30 @@ create trigger plan_schedule_set_updated_at
   before update on plan_schedule
   for each row execute function set_updated_at();
 
+-- Meal logging: numbers are always user-entered (manually, or copied in
+-- after reading a food scan's AI estimate) -- no auto-fill from the scan.
+create table if not exists meal_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  log_date date not null,
+  meal_type text not null check (meal_type in ('breakfast', 'lunch', 'dinner', 'snack')),
+  description text not null default '',
+  calories int not null default 0 check (calories >= 0),
+  protein_g numeric not null default 0 check (protein_g >= 0),
+  carbs_g numeric not null default 0 check (carbs_g >= 0),
+  fat_g numeric not null default 0 check (fat_g >= 0),
+  source text not null default 'manual' check (source in ('manual', 'scan', 'search')),
+  created_at timestamptz not null default now()
+);
+
+alter table meal_logs enable row level security;
+
+drop policy if exists "Users manage their own meal logs" on meal_logs;
+create policy "Users manage their own meal logs"
+  on meal_logs for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 -- ─────────────────────────────────────────────
 -- AI history: past scan/search results, private to each user
 -- ─────────────────────────────────────────────
@@ -851,6 +875,7 @@ grant select, insert, update, delete on ai_history to authenticated;
 grant select, insert, update, delete on hydration_logs to authenticated;
 grant select, insert, delete on saved_exercises to authenticated;
 grant select, insert, update, delete on plan_schedule to authenticated;
+grant select, insert, update, delete on meal_logs to authenticated;
 grant select on profiles to authenticated;
 grant update (display_name) on profiles to authenticated;
 grant update (height_cm, weight_kg, age, sex, activity_level, goal) on profiles to authenticated;

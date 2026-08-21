@@ -44,7 +44,9 @@ export async function updateBodyStats(stats: BodyStats): Promise<void> {
 // and nudged by goal. Requires more than just height (despite the roadmap
 // doc only mentioning height) since no BMR formula is accurate without age
 // and sex too.
-export function computeTargets(stats: BodyStats): { calories: number; proteinGrams: number } | null {
+export function computeTargets(
+  stats: BodyStats
+): { calories: number; proteinGrams: number; carbGrams: number; fatGrams: number } | null {
   const { height_cm, weight_kg, age, sex, activity_level, goal } = stats;
   if (!height_cm || !weight_kg || !age || !sex || !activity_level || !goal) return null;
 
@@ -57,7 +59,14 @@ export function computeTargets(stats: BodyStats): { calories: number; proteinGra
   const calories = Math.round(tdee + GOAL_ADJUSTMENT[goal]);
   const proteinGrams = Math.round(weight_kg * 1.8);
 
-  return { calories, proteinGrams };
+  // Fat gets a standard 25% of total calories; carbs fill the remainder
+  // after protein and fat. Both are derived from the same calorie target,
+  // not independently invented numbers.
+  const fatGrams = Math.round((calories * 0.25) / 9);
+  const remainingCalories = Math.max(0, calories - proteinGrams * 4 - fatGrams * 9);
+  const carbGrams = Math.round(remainingCalories / 4);
+
+  return { calories, proteinGrams, carbGrams, fatGrams };
 }
 
 export async function deleteAccount(): Promise<void> {
