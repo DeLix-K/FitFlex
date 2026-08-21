@@ -4,11 +4,13 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { fetchHistory } from '../lib/aiHistory';
+import { dark } from '../lib/theme';
 import type { AiHistoryEntry, AiHistoryKind } from '../lib/types';
 
 const FILTERS: { label: string; value: AiHistoryKind | 'all' }[] = [
@@ -33,13 +35,13 @@ const KIND_LABELS: Record<AiHistoryKind, string> = {
 };
 
 const KIND_COLORS: Record<AiHistoryKind, string> = {
-  coach_chat: '#0891b2',
-  mood_reflection: '#db2777',
-  sleep_insight: '#4f46e5',
-  exercise_explanation: '#7c3aed',
-  equipment_scan: '#2563eb',
-  food_scan: '#16a34a',
-  nutrition_search: '#ea580c',
+  coach_chat: '#22d3ee',
+  mood_reflection: '#f472b6',
+  sleep_insight: '#818cf8',
+  exercise_explanation: '#c084fc',
+  equipment_scan: '#60a5fa',
+  food_scan: '#a3e635',
+  nutrition_search: '#fb923c',
 };
 
 function formatDate(iso: string): string {
@@ -83,7 +85,11 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>History</Text>
 
-      <View style={styles.filterRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
         {FILTERS.map((f) => (
           <Pressable
             key={f.value}
@@ -97,11 +103,11 @@ export default function HistoryScreen() {
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator />
+          <ActivityIndicator color={dark.accent} />
         </View>
       ) : error ? (
         <View style={styles.centered}>
@@ -118,7 +124,9 @@ export default function HistoryScreen() {
           data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />
+          }
           renderItem={({ item }) => {
             const expanded = expandedId === item.id;
             return (
@@ -154,16 +162,17 @@ export default function HistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: dark.background,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
     paddingHorizontal: 20,
     paddingTop: 16,
     marginBottom: 12,
   },
   filterRow: {
-    flexDirection: 'row',
     paddingHorizontal: 20,
     marginBottom: 12,
     gap: 8,
@@ -172,18 +181,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 16,
-    backgroundColor: '#f1f1f1',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
   },
   filterChipActive: {
-    backgroundColor: '#111',
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
   },
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#444',
+    color: dark.textMuted,
   },
   filterChipTextActive: {
-    color: '#fff',
+    color: '#0a0a0a',
   },
   centered: {
     flex: 1,
@@ -192,11 +204,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   error: {
-    color: '#dc2626',
+    color: dark.danger,
     textAlign: 'center',
   },
   empty: {
-    color: '#888',
+    color: dark.textFaint,
     textAlign: 'center',
   },
   listContent: {
@@ -205,7 +217,8 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -222,28 +235,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   badgeText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontSize: 11,
     fontWeight: '700',
   },
   date: {
     fontSize: 12,
-    color: '#999',
+    color: dark.textFaint,
   },
   query: {
     fontSize: 13,
     fontStyle: 'italic',
-    color: '#555',
+    color: dark.textMuted,
     marginBottom: 6,
   },
   resultText: {
     fontSize: 14,
-    color: '#333',
+    color: dark.text,
     lineHeight: 20,
   },
   expandHint: {
     fontSize: 11,
-    color: '#aaa',
+    color: dark.textFaint,
     marginTop: 8,
   },
 });
