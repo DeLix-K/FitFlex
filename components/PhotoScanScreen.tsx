@@ -3,7 +3,6 @@ import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -116,11 +115,9 @@ export default function PhotoScanScreen({
       />
 
       <View style={styles.buttonRow}>
-        {Platform.OS !== 'web' && (
-          <Pressable style={styles.button} onPress={() => pickFrom('camera')}>
-            <Text style={styles.buttonText}>Take Photo</Text>
-          </Pressable>
-        )}
+        <Pressable style={styles.button} onPress={() => pickFrom('camera')}>
+          <Text style={styles.buttonText}>Take Photo</Text>
+        </Pressable>
         <Pressable style={styles.button} onPress={() => pickFrom('library')}>
           <Text style={styles.buttonText}>Choose from Library</Text>
         </Pressable>

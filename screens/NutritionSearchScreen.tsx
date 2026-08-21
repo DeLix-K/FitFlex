@@ -49,6 +49,7 @@ export default function NutritionSearchScreen() {
   const [addMealType, setAddMealType] = useState<MealType>('snack');
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [matches, setMatches] = useState<UsdaFoodMatch[]>([]);
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,21 +104,29 @@ export default function NutritionSearchScreen() {
     setMatches([]);
     try {
       const usdaMatches = await searchUsdaFoods(trimmed);
-      if (usdaMatches.length > 0) {
-        setMatches(usdaMatches);
-        return;
+      setMatches(usdaMatches);
+      if (usdaMatches.length === 0) {
+        setError(`No database matches for "${trimmed}" — try Ask AI instead for an estimate.`);
       }
-    } catch {
-      // fall through to AI
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSearching(false);
     }
+  };
+
+  const askAi = async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
 
     if (!aiGate.canUse) {
       setError("You've used today's free AI actions. Upgrade to Premium for unlimited access.");
       return;
     }
-    setSearching(true);
+    setAsking(true);
+    setError(null);
+    setAiResult(null);
+    setMatches([]);
     try {
       const reply = await askClaude(buildNutritionSearchPrompt(trimmed));
       setAiResult(reply);
@@ -126,7 +135,7 @@ export default function NutritionSearchScreen() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setSearching(false);
+      setAsking(false);
     }
   };
 
@@ -247,9 +256,22 @@ export default function NutritionSearchScreen() {
               onSubmitEditing={search}
               returnKeyType="search"
             />
-            <Pressable style={styles.searchButton} onPress={search} disabled={searching || !query.trim()}>
-              {searching ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.searchButtonText}>Search</Text>}
-            </Pressable>
+            <View style={styles.actionRow}>
+              <Pressable
+                style={[styles.searchButton, styles.actionButton]}
+                onPress={search}
+                disabled={searching || asking || !query.trim()}
+              >
+                {searching ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.searchButtonText}>Search</Text>}
+              </Pressable>
+              <Pressable
+                style={[styles.askAiButton, styles.actionButton]}
+                onPress={askAi}
+                disabled={searching || asking || !query.trim()}
+              >
+                {asking ? <ActivityIndicator color={dark.accent} /> : <Text style={styles.askAiButtonText}>Ask AI</Text>}
+              </Pressable>
+            </View>
 
             <ScrollView style={styles.modalResults}>
               {matches.map((match) => (
@@ -459,15 +481,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 8,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  actionButton: {
+    flex: 1,
+  },
   searchButton: {
     backgroundColor: dark.accent,
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
-    marginTop: 10,
   },
   searchButtonText: {
     color: '#0a0a0a',
+    fontWeight: '700',
+  },
+  askAiButton: {
+    borderWidth: 1,
+    borderColor: dark.accent,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  askAiButtonText: {
+    color: dark.accent,
     fontWeight: '700',
   },
   modalResults: {

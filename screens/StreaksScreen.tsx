@@ -237,9 +237,9 @@ export default function StreaksScreen() {
             disabled={loggedToday || logging}
           >
             {logging ? (
-              <ActivityIndicator color="#0a0a0a" />
+              <ActivityIndicator color={loggedToday ? dark.accent : '#0a0a0a'} />
             ) : (
-              <Text style={styles.logButtonText}>
+              <Text style={[styles.logButtonText, loggedToday && styles.logButtonTextDone]}>
                 {loggedToday ? "✓ Logged today's workout" : "Log today's workout"}
               </Text>
             )}
@@ -445,6 +445,9 @@ const styles = StyleSheet.create({
     color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 14,
+  },
+  logButtonTextDone: {
+    color: dark.accent,
   },
   sectionTitle: {
     color: dark.text,
