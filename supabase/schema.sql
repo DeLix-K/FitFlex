@@ -117,6 +117,31 @@ create trigger workout_plans_set_updated_at
   before update on workout_plans
   for each row execute function set_updated_at();
 
+-- Weekly schedule: which plan (if any) a user does on each day of the
+-- week. Null plan_id means a rest day.
+create table if not exists plan_schedule (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  weekday int not null check (weekday between 0 and 6), -- 0 = Sunday, matches JS Date#getDay()
+  plan_id uuid references workout_plans(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, weekday)
+);
+
+alter table plan_schedule enable row level security;
+
+drop policy if exists "Users manage their own plan schedule" on plan_schedule;
+create policy "Users manage their own plan schedule"
+  on plan_schedule for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop trigger if exists plan_schedule_set_updated_at on plan_schedule;
+create trigger plan_schedule_set_updated_at
+  before update on plan_schedule
+  for each row execute function set_updated_at();
+
 -- ─────────────────────────────────────────────
 -- AI history: past scan/search results, private to each user
 -- ─────────────────────────────────────────────
@@ -825,6 +850,7 @@ grant select, insert, update, delete on workout_plan_exercises to authenticated;
 grant select, insert, update, delete on ai_history to authenticated;
 grant select, insert, update, delete on hydration_logs to authenticated;
 grant select, insert, delete on saved_exercises to authenticated;
+grant select, insert, update, delete on plan_schedule to authenticated;
 grant select on profiles to authenticated;
 grant update (display_name) on profiles to authenticated;
 grant update (height_cm, weight_kg, age, sex, activity_level, goal) on profiles to authenticated;

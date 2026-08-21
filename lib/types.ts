@@ -21,6 +21,15 @@ export type WorkoutPlan = {
   updated_at: string;
 };
 
+export type PlanScheduleEntry = {
+  id: string;
+  user_id: string;
+  weekday: number;
+  plan_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type WorkoutPlanExercise = {
   id: string;
   workout_plan_id: string;
