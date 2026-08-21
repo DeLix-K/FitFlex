@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -14,7 +14,7 @@ import { useAiGate } from '../hooks/useAiGate';
 import { saveHistoryEntry } from '../lib/aiHistory';
 import { askClaude, buildExerciseExplanationPrompt } from '../lib/claude';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { Exercise, ExerciseCategory } from '../lib/types';
 
 type AiState = { loading: boolean; text?: string; error?: string };
@@ -26,35 +26,38 @@ const FILTERS: { label: string; value: ExerciseCategory | 'all' }[] = [
   { label: 'Gym', value: 'gym' },
 ];
 
-const CATEGORY_COLORS: Record<ExerciseCategory, string> = {
-  home: '#2563eb',
-  outdoor: '#16a34a',
-  gym: '#ea580c',
-};
-
 export default function ExerciseListScreen() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<ExerciseCategory | 'all'>('all');
+  const [muscleFilter, setMuscleFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiExplanations, setAiExplanations] = useState<Record<string, AiState>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
   const aiGate = useAiGate();
 
   const fetchExercises = useCallback(async () => {
     setError(null);
-    const { data, error: fetchError } = await supabase
-      .from('exercises')
-      .select('*')
-      .order('name', { ascending: true });
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
 
-    if (fetchError) {
-      setError(fetchError.message);
+    const [exResult, savedResult] = await Promise.all([
+      supabase.from('exercises').select('*').order('name', { ascending: true }),
+      userId
+        ? supabase.from('saved_exercises').select('exercise_id').eq('user_id', userId)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (exResult.error) {
+      setError(exResult.error.message);
     } else {
-      setExercises(data ?? []);
+      setExercises(exResult.data ?? []);
     }
+    setSavedIds(new Set((savedResult.data ?? []).map((r: { exercise_id: string }) => r.exercise_id)));
   }, []);
 
   useEffect(() => {
@@ -68,8 +71,17 @@ export default function ExerciseListScreen() {
     setRefreshing(false);
   }, [fetchExercises]);
 
+  // Derived from the real muscle_groups data rather than a hardcoded list,
+  // so filters never reference a group that isn't actually in the catalog.
+  const muscleGroups = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of exercises) for (const mg of e.muscle_groups) set.add(mg);
+    return [...set].sort();
+  }, [exercises]);
+
   const filtered = exercises
     .filter((e) => filter === 'all' || e.category === filter)
+    .filter((e) => !muscleFilter || e.muscle_groups.includes(muscleFilter))
     .filter((e) => e.name.toLowerCase().includes(search.trim().toLowerCase()));
 
   const askAi = async (item: Exercise) => {
@@ -98,6 +110,32 @@ export default function ExerciseListScreen() {
     }
   };
 
+  const toggleSave = async (item: Exercise) => {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) return;
+
+    setSavingId(item.id);
+    const isSaved = savedIds.has(item.id);
+    try {
+      if (isSaved) {
+        await supabase.from('saved_exercises').delete().eq('user_id', userId).eq('exercise_id', item.id);
+        setSavedIds((s) => {
+          const next = new Set(s);
+          next.delete(item.id);
+          return next;
+        });
+      } else {
+        await supabase.from('saved_exercises').insert({ user_id: userId, exercise_id: item.id });
+        setSavedIds((s) => new Set(s).add(item.id));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.usageRow}>
@@ -111,6 +149,7 @@ export default function ExerciseListScreen() {
         <TextInput
           style={styles.searchInput}
           placeholder="Search exercises..."
+          placeholderTextColor={dark.textFaint}
           value={search}
           onChangeText={setSearch}
           autoCapitalize="none"
@@ -132,9 +171,30 @@ export default function ExerciseListScreen() {
         ))}
       </View>
 
+      {muscleGroups.length > 0 && (
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.muscleFilterRow}
+          contentContainerStyle={styles.muscleFilterContent}
+          data={muscleGroups}
+          keyExtractor={(mg) => mg}
+          renderItem={({ item: mg }) => (
+            <Pressable
+              style={[styles.muscleChip, muscleFilter === mg && styles.muscleChipActive]}
+              onPress={() => setMuscleFilter(muscleFilter === mg ? null : mg)}
+            >
+              <Text style={[styles.muscleChipText, muscleFilter === mg && styles.muscleChipTextActive]}>
+                {mg}
+              </Text>
+            </Pressable>
+          )}
+        />
+      )}
+
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator />
+          <ActivityIndicator color={dark.accent} />
         </View>
       ) : error ? (
         <View style={styles.centered}>
@@ -151,9 +211,10 @@ export default function ExerciseListScreen() {
           data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
           renderItem={({ item }) => {
             const expanded = expandedId === item.id;
+            const saved = savedIds.has(item.id);
             return (
               <Pressable
                 style={styles.card}
@@ -161,9 +222,17 @@ export default function ExerciseListScreen() {
               >
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardName}>{item.name}</Text>
-                  <View
-                    style={[styles.badge, { backgroundColor: CATEGORY_COLORS[item.category] }]}
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      toggleSave(item);
+                    }}
+                    disabled={savingId === item.id}
+                    hitSlop={8}
                   >
+                    <Text style={styles.saveIcon}>{saved ? '★' : '☆'}</Text>
+                  </Pressable>
+                  <View style={styles.badge}>
                     <Text style={styles.badgeText}>{item.category}</Text>
                   </View>
                 </View>
@@ -208,14 +277,14 @@ export default function ExerciseListScreen() {
                                 askAi(item);
                               }}
                             >
-                              <Text style={styles.aiButtonText}>Ask AI to explain</Text>
+                              <Text style={styles.aiButtonText}>Ask AI: form, sets/reps & mistakes</Text>
                             </Pressable>
                           );
                         }
                         if (ai.loading) {
                           return (
                             <View style={styles.aiLoadingRow}>
-                              <ActivityIndicator size="small" />
+                              <ActivityIndicator size="small" color={dark.accent} />
                               <Text style={styles.aiLoadingText}>Asking AI...</Text>
                             </View>
                           );
@@ -260,7 +329,7 @@ export default function ExerciseListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: dark.background,
   },
   usageRow: {
     paddingHorizontal: 20,
@@ -272,7 +341,9 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    color: dark.text,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -281,25 +352,55 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 8,
   },
   filterChip: {
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 16,
-    backgroundColor: '#f1f1f1',
+    backgroundColor: dark.surface,
+    borderWidth: 1,
+    borderColor: dark.border,
   },
   filterChipActive: {
-    backgroundColor: '#111',
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
   },
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#444',
+    color: dark.textMuted,
   },
   filterChipTextActive: {
-    color: '#fff',
+    color: '#0a0a0a',
+  },
+  muscleFilterRow: {
+    marginBottom: 12,
+  },
+  muscleFilterContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  muscleChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: dark.border,
+  },
+  muscleChipActive: {
+    backgroundColor: dark.surfaceElevated,
+    borderColor: dark.accent,
+  },
+  muscleChipText: {
+    fontSize: 12,
+    color: dark.textFaint,
+    textTransform: 'capitalize',
+  },
+  muscleChipTextActive: {
+    color: dark.accent,
+    fontWeight: '600',
   },
   centered: {
     flex: 1,
@@ -308,11 +409,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   error: {
-    color: '#dc2626',
+    color: dark.danger,
     textAlign: 'center',
   },
   empty: {
-    color: '#888',
+    color: dark.textFaint,
     textAlign: 'center',
   },
   listContent: {
@@ -321,58 +422,65 @@ const styles = StyleSheet.create({
   },
   card: {
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
   },
   cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
+    gap: 8,
   },
   cardName: {
     fontSize: 17,
     fontWeight: '700',
-    flexShrink: 1,
+    color: dark.text,
+    flex: 1,
+  },
+  saveIcon: {
+    fontSize: 20,
+    color: dark.accent,
   },
   badge: {
     paddingVertical: 3,
     paddingHorizontal: 10,
     borderRadius: 12,
+    backgroundColor: dark.surfaceElevated,
   },
   badgeText: {
-    color: '#fff',
+    color: dark.textMuted,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   metaLine: {
     fontSize: 13,
-    color: '#555',
+    color: dark.textMuted,
     marginTop: 2,
   },
   metaLabel: {
     fontWeight: '600',
-    color: '#333',
+    color: dark.text,
   },
   details: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: dark.border,
   },
   detailsLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#111',
+    color: dark.text,
     marginTop: 6,
     textTransform: 'uppercase',
   },
   detailsText: {
     fontSize: 14,
-    color: '#444',
+    color: dark.textMuted,
     marginTop: 2,
     lineHeight: 20,
   },
@@ -380,13 +488,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   aiButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
   },
   aiButtonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -397,16 +505,16 @@ const styles = StyleSheet.create({
   },
   aiLoadingText: {
     fontSize: 13,
-    color: '#666',
+    color: dark.textMuted,
   },
   aiError: {
     fontSize: 13,
-    color: '#dc2626',
+    color: dark.danger,
     marginBottom: 8,
   },
   expandHint: {
     fontSize: 11,
-    color: '#aaa',
+    color: dark.textFaint,
     marginTop: 10,
   },
 });

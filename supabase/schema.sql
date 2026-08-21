@@ -35,6 +35,23 @@ create policy "Only the admin can update exercises"
   using (exists (select 1 from profiles where id = auth.uid() and is_admin))
   with check (exists (select 1 from profiles where id = auth.uid() and is_admin));
 
+-- Bookmarking ("Save exercise"), private per user.
+create table if not exists saved_exercises (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  exercise_id uuid not null references exercises(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (user_id, exercise_id)
+);
+
+alter table saved_exercises enable row level security;
+
+drop policy if exists "Users manage their own saved exercises" on saved_exercises;
+create policy "Users manage their own saved exercises"
+  on saved_exercises for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 -- ─────────────────────────────────────────────
 -- Workout plans: created by users, private to each user
 -- ─────────────────────────────────────────────
@@ -807,6 +824,7 @@ grant select, insert, update, delete on workout_plans to authenticated;
 grant select, insert, update, delete on workout_plan_exercises to authenticated;
 grant select, insert, update, delete on ai_history to authenticated;
 grant select, insert, update, delete on hydration_logs to authenticated;
+grant select, insert, delete on saved_exercises to authenticated;
 grant select on profiles to authenticated;
 grant update (display_name) on profiles to authenticated;
 grant update (height_cm, weight_kg, age, sex, activity_level, goal) on profiles to authenticated;

@@ -131,11 +131,12 @@ export function buildExerciseExplanationPrompt(exercise: {
   equipment: string[];
 }): string {
   return (
-    `Give a short, encouraging explanation (3-4 sentences) for the exercise "${exercise.name}" ` +
+    `Give a short, encouraging explanation for the exercise "${exercise.name}" ` +
     `(category: ${exercise.category}${
       exercise.equipment.length ? `, equipment: ${exercise.equipment.join(', ')}` : ''
     }). ` +
-    `Cover proper form tips, a common mistake to avoid, and why it's worth doing. ` +
-    `Write for a beginner. Do not use markdown formatting.`
+    'Cover, in a few sentences each: proper form tips, a suggested sets/reps range for a ' +
+    "beginner, the single most common mistake to avoid, and why it's worth doing. " +
+    'Write for a beginner. Do not use markdown formatting, just plain sentences/paragraphs.'
   );
 }
