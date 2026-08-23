@@ -44,7 +44,7 @@ export default function ResetPasswordScreen({ onDone }: { onDone: () => void }) 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <Text style={styles.title}>FitFlex</Text>
       <Text style={styles.subtitle}>Choose a new password</Text>
