@@ -27,6 +27,8 @@ import { fetchCoachPersonality, updateCoachPersonality } from '../lib/coachInsig
 import { getMyStats } from '../lib/streaks';
 import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
+import { speak, stopSpeaking } from '../lib/voice';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import type { Tab } from '../components/AppShell';
 
 const RECOMMENDATION_CARDS = [
@@ -60,6 +62,7 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
   const [displayName, setDisplayName] = useState('there');
   const [personality, setPersonality] = useState<CoachPersonality>('encouraging');
   const [recalibrateOpen, setRecalibrateOpen] = useState(false);
+  const [voiceRepliesOn, setVoiceRepliesOn] = useState(false);
   const aiGate = useAiGate();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -120,6 +123,7 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
       setMessages([...nextMessages, { role: 'assistant', content: reply }]);
       saveHistoryEntry('coach_chat', reply, trimmed);
       aiGate.refresh();
+      if (voiceRepliesOn) speak(reply);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setMessages(messages);
@@ -127,6 +131,16 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
       setSending(false);
     }
   };
+
+  const voice = useVoiceInput((transcript) => send(transcript));
+
+  useEffect(() => {
+    if (voice.error) setError(voice.error);
+  }, [voice.error]);
+
+  useEffect(() => {
+    return () => stopSpeaking();
+  }, []);
 
   return (
     <KeyboardAvoidingView
@@ -163,6 +177,22 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
               </Text>
             </Pressable>
           ))}
+
+          {voice.available && (
+            <Pressable
+              style={[styles.personalityChip, voiceRepliesOn && styles.personalityChipActive]}
+              onPress={() => {
+                if (voiceRepliesOn) stopSpeaking();
+                setVoiceRepliesOn((v) => !v);
+              }}
+            >
+              <Text
+                style={[styles.personalityChipText, voiceRepliesOn && styles.personalityChipTextActive]}
+              >
+                {voiceRepliesOn ? '🔊 Speaks Replies' : '🔈 Speak Replies'}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -233,14 +263,24 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
       </ScrollView>
 
       <View style={styles.inputRow}>
+        {voice.available && (
+          <Pressable
+            style={[styles.micButton, voice.listening && styles.micButtonActive]}
+            onPress={() => (voice.listening ? voice.stopListening() : voice.startListening())}
+            disabled={sending}
+          >
+            <Text style={styles.micButtonText}>{voice.listening ? '⏹️' : '🎙️'}</Text>
+          </Pressable>
+        )}
         <TextInput
           style={styles.input}
-          placeholder="Ask your coach..."
+          placeholder={voice.listening ? 'Listening...' : 'Ask your coach...'}
           placeholderTextColor={dark.textFaint}
-          value={input}
+          value={voice.listening ? voice.interimText : input}
           onChangeText={setInput}
           onSubmitEditing={() => send(input)}
           returnKeyType="send"
+          editable={!voice.listening}
         />
         <Pressable
           style={[styles.sendButton, (!input.trim() || sending) && styles.sendButtonDisabled]}
@@ -469,5 +509,22 @@ const styles = StyleSheet.create({
     color: '#0a0a0a',
     fontWeight: '700',
     fontSize: 13,
+  },
+  micButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micButtonActive: {
+    backgroundColor: dark.danger,
+    borderColor: dark.danger,
+  },
+  micButtonText: {
+    fontSize: 16,
   },
 });

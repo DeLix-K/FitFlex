@@ -38,7 +38,14 @@
           "cameraPermission": "FitFlex uses your camera to identify gym equipment from a photo."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "FitFlex uses your microphone to hear voice commands to your AI Coach.",
+          "speechRecognitionPermission": "FitFlex uses speech recognition to turn your voice into text for your AI Coach."
+        }
+      ]
     ],
     "extra": {
       "eas": {
