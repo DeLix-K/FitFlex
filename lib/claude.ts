@@ -61,7 +61,30 @@ export function buildNutritionSearchPrompt(query: string): string {
   );
 }
 
-export function buildCoachSystemPrompt(plans: { name: string; exerciseNames: string[] }[]): string {
+export type CoachPersonality = 'encouraging' | 'strict' | 'data_focused';
+
+export const COACH_PERSONALITIES: { value: CoachPersonality; label: string; blurb: string }[] = [
+  { value: 'encouraging', label: 'Encouraging', blurb: 'Warm and upbeat' },
+  { value: 'strict', label: 'Strict', blurb: 'Direct and no-nonsense' },
+  { value: 'data_focused', label: 'Data-Focused', blurb: 'Analytical, numbers-first' },
+];
+
+const PERSONALITY_TONE: Record<CoachPersonality, string> = {
+  encouraging:
+    'Your tone is warm, upbeat, and encouraging. Celebrate effort and progress, and keep the user motivated ' +
+    'even when the news (e.g. a missed day, low sleep) isn\'t great.',
+  strict:
+    'Your tone is direct, disciplined, and no-nonsense. Be firm but respectful, cut the fluff, and hold the ' +
+    'user accountable — call out excuses gently but plainly.',
+  data_focused:
+    'Your tone is analytical and precise. Lead with the numbers you were given, explain the reasoning behind ' +
+    'each recommendation, and keep emotional language to a minimum.',
+};
+
+export function buildCoachSystemPrompt(
+  plans: { name: string; exerciseNames: string[] }[],
+  personality: CoachPersonality = 'encouraging'
+): string {
   const planSummary =
     plans.length === 0
       ? "This user hasn't saved any workout plans yet."
@@ -73,7 +96,8 @@ export function buildCoachSystemPrompt(plans: { name: string; exerciseNames: str
           .join('\n');
 
   return (
-    'You are the FitFlex AI Coach, a warm, encouraging, knowledgeable fitness coach inside a workout app. ' +
+    'You are the FitFlex AI Coach, a knowledgeable fitness coach inside a workout app. ' +
+    PERSONALITY_TONE[personality] + '\n\n' +
     "You can see the user's saved workout plans below and should refer to them naturally when relevant " +
     "(e.g. suggesting which saved plan to do today, or noting they haven't built one yet). " +
     "You answer fitness, exercise, and general wellness questions, suggest workouts, and adjust advice for " +
@@ -83,6 +107,119 @@ export function buildCoachSystemPrompt(plans: { name: string; exerciseNames: str
     `Their saved workout plans:\n${planSummary}`
   );
 }
+
+export type DailyBriefingData = {
+  sleepHours: number | null;
+  sleepScore: number | null;
+  mood: number | null;
+  energy: number | null;
+  stress: number | null;
+  currentStreak: number;
+  todaysPlanName: string | null;
+  hasLoggedToday: boolean;
+};
+
+export function buildDailyBriefingPrompt(
+  data: DailyBriefingData,
+  personality: CoachPersonality = 'encouraging'
+): string {
+  const facts = [
+    data.sleepHours != null
+      ? `Slept ${data.sleepHours.toFixed(1)}h last night${data.sleepScore != null ? ` (sleep score ${data.sleepScore}/100)` : ''}.`
+      : 'No sleep logged for last night.',
+    data.energy != null ? `Energy self-rated ${data.energy}/5 today.` : null,
+    data.stress != null ? `Stress self-rated ${data.stress}/5 today.` : null,
+    data.mood != null ? `Mood self-rated ${data.mood}/5 today.` : null,
+    `Current workout streak: ${data.currentStreak} day(s).`,
+    data.todaysPlanName ? `Today's scheduled plan is "${data.todaysPlanName}".` : 'No plan is scheduled for today.',
+    data.hasLoggedToday ? 'Already logged a workout today.' : 'Has not logged a workout yet today.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    'You are the FitFlex AI Coach writing a short "Daily Briefing" for a user, using ONLY the real data given ' +
+    `below — never invent numbers, scores, or claims this data doesn't support. ${PERSONALITY_TONE[personality]}\n\n` +
+    `Today's real data: ${facts}\n\n` +
+    "Write 2-4 sentences: acknowledge what the data actually shows (e.g. low sleep, good energy), and give one " +
+    "concrete, specific adjustment for today's training or recovery based on it. If a plan is scheduled, " +
+    'reference it by name. If there truly isn\'t enough data to say anything meaningful, say so honestly instead ' +
+    'of inventing a pattern. No markdown, no headers, plain conversational sentences, under 100 words.'
+  );
+}
+
+export type PostWorkoutInsightData = {
+  currentStreak: number;
+  thisWeekCount: number;
+  lastWeekCount: number;
+  totalWorkouts: number;
+  recentSleepAvgHours: number | null;
+};
+
+export function buildPostWorkoutInsightPrompt(
+  data: PostWorkoutInsightData,
+  personality: CoachPersonality = 'encouraging'
+): string {
+  const facts =
+    `Just logged a workout. Current streak: ${data.currentStreak} day(s). Total workouts logged all-time: ` +
+    `${data.totalWorkouts}. Workouts this week (including today): ${data.thisWeekCount}. Workouts last week: ` +
+    `${data.lastWeekCount}.` +
+    (data.recentSleepAvgHours != null
+      ? ` Average sleep over the last several logged nights: ${data.recentSleepAvgHours.toFixed(1)}h.`
+      : ' No recent sleep data logged.');
+
+  return (
+    'You are the FitFlex AI Coach writing a short post-workout insight right after a user logs a session, using ' +
+    `ONLY the real data given below — never invent an exercise, weight, or plateau claim this data doesn't ` +
+    `support. ${PERSONALITY_TONE[personality]}\n\n` +
+    `Real data: ${facts}\n\n` +
+    'Write 2-3 sentences: note a genuine trend in this data (e.g. more consistent than last week, streak ' +
+    'building, or sleep possibly affecting training) and one concrete, practical suggestion for what to focus on ' +
+    "next. If the data doesn't support a real trend yet, say so honestly and encourage continued logging instead " +
+    'of inventing one. No markdown, plain conversational sentences, under 80 words.'
+  );
+}
+
+export function buildSessionRecalibrationPrompt(params: {
+  planName: string | null;
+  exerciseNames: string[];
+  soreness: string;
+  timeAvailable: string;
+  equipment: string;
+  energyLevel: number;
+  personality?: CoachPersonality;
+}): string {
+  const personality = params.personality ?? 'encouraging';
+  const planLine = params.planName
+    ? `Today's scheduled plan is "${params.planName}"${
+        params.exerciseNames.length ? ` with exercises: ${params.exerciseNames.join(', ')}` : ' (no exercises added yet)'
+      }.`
+    : 'No specific plan is scheduled for today — suggest a sensible session from scratch.';
+
+  return (
+    'You are the FitFlex AI Coach. A user wants their session recalibrated right now based on how they actually ' +
+    `feel today. ${PERSONALITY_TONE[personality]}\n\n` +
+    `${planLine}\n` +
+    `Soreness/limitations: ${params.soreness || 'none mentioned'}.\n` +
+    `Time available: ${params.timeAvailable}.\n` +
+    `Equipment available: ${params.equipment}.\n` +
+    `Self-rated energy: ${params.energyLevel}/5.\n\n` +
+    "Rewrite today's session to fit these real constraints: adjust or swap specific exercises, and adjust total " +
+    'volume/intensity for the time and energy given. Be specific (exercise names, roughly how many sets), not ' +
+    'generic. Keep it practical and realistic for the equipment available. No markdown formatting, plain ' +
+    'sentences and short lists using "-" for bullets, under 180 words.'
+  );
+}
+
+export const FORM_CHECK_PROMPT =
+  'This photo shows someone performing a resistance-training exercise mid-rep. Identify the exercise if you ' +
+  'can, then give feedback on visible form cues only (e.g. knee alignment/cave, back/spine position, bar path, ' +
+  'squat/hinge depth, foot positioning) — only comment on what is actually visible in this single frame, do not ' +
+  'guess at the full rep or invent issues you cannot see. Note 1-2 things done well and 1-2 specific things to ' +
+  'adjust, in plain sentences. If the photo does not clearly show a person mid-exercise, say so plainly instead ' +
+  'of guessing. Remind them once, briefly, that a single photo cannot capture the full movement — for a fuller ' +
+  'picture, submitting photos from a couple of points in the rep helps. Keep the whole reply under 170 words, ' +
+  'no markdown formatting.';
 
 export function buildWellnessReflectionPrompt(mood: number, notes: string): string {
   const moodLabel = ['very low', 'low', 'okay', 'good', 'great'][mood - 1] ?? 'okay';

@@ -64,7 +64,11 @@ export type AiHistoryKind =
   | 'exercise_explanation'
   | 'coach_chat'
   | 'mood_reflection'
-  | 'sleep_insight';
+  | 'sleep_insight'
+  | 'daily_briefing'
+  | 'post_workout_insight'
+  | 'session_recalibration'
+  | 'form_check';
 
 export type AiHistoryEntry = {
   id: string;

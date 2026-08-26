@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,12 +11,23 @@ import {
   View,
 } from 'react-native';
 import AiUsageIndicator from '../components/AiUsageIndicator';
+import DailyBriefingCard from '../components/DailyBriefingCard';
+import PostWorkoutInsightCard from '../components/PostWorkoutInsightCard';
+import SessionRecalibrationModal from '../components/SessionRecalibrationModal';
 import { useAiGate } from '../hooks/useAiGate';
 import { saveHistoryEntry } from '../lib/aiHistory';
-import { askClaudeChat, buildCoachSystemPrompt, type ChatMessage } from '../lib/claude';
+import {
+  askClaudeChat,
+  buildCoachSystemPrompt,
+  COACH_PERSONALITIES,
+  type ChatMessage,
+  type CoachPersonality,
+} from '../lib/claude';
+import { fetchCoachPersonality, updateCoachPersonality } from '../lib/coachInsights';
 import { getMyStats } from '../lib/streaks';
 import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
+import type { Tab } from '../components/AppShell';
 
 const RECOMMENDATION_CARDS = [
   { icon: '🏋️', label: "Today's Workout", prompt: "What should I do for today's workout?" },
@@ -40,13 +51,15 @@ function greeting(): string {
   return 'Good evening';
 }
 
-export default function CoachScreen() {
+export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  const [plans, setPlans] = useState<{ name: string; exerciseNames: string[] }[]>([]);
   const [displayName, setDisplayName] = useState('there');
+  const [personality, setPersonality] = useState<CoachPersonality>('encouraging');
+  const [recalibrateOpen, setRecalibrateOpen] = useState(false);
   const aiGate = useAiGate();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -55,7 +68,7 @@ export default function CoachScreen() {
       .from('workout_plans')
       .select('name, workout_plan_exercises(exercises(name))')
       .then(({ data }) => {
-        const plans = (data ?? []).map((plan) => {
+        const loadedPlans = (data ?? []).map((plan) => {
           const rows = (plan.workout_plan_exercises ?? []) as unknown as {
             exercises: { name: string } | { name: string }[] | null;
           }[];
@@ -66,13 +79,26 @@ export default function CoachScreen() {
           });
           return { name: plan.name as string, exerciseNames };
         });
-        setSystemPrompt(buildCoachSystemPrompt(plans));
+        setPlans(loadedPlans);
       });
 
     getMyStats()
       .then((s) => setDisplayName(s.displayName))
       .catch(() => {});
+
+    fetchCoachPersonality()
+      .then(setPersonality)
+      .catch(() => {});
   }, []);
+
+  const handlePersonalityChange = async (p: CoachPersonality) => {
+    setPersonality(p);
+    try {
+      await updateCoachPersonality(p);
+    } catch {
+      // Non-critical preference — keep the local selection even if the save fails.
+    }
+  };
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -90,7 +116,7 @@ export default function CoachScreen() {
     setSending(true);
 
     try {
-      const reply = await askClaudeChat(nextMessages, systemPrompt ?? undefined);
+      const reply = await askClaudeChat(nextMessages, buildCoachSystemPrompt(plans, personality));
       setMessages([...nextMessages, { role: 'assistant', content: reply }]);
       saveHistoryEntry('coach_chat', reply, trimmed);
       aiGate.refresh();
@@ -119,6 +145,25 @@ export default function CoachScreen() {
             loaded={aiGate.loaded}
           />
         </View>
+
+        <View style={styles.personalityRow}>
+          {COACH_PERSONALITIES.map((p) => (
+            <Pressable
+              key={p.value}
+              style={[styles.personalityChip, personality === p.value && styles.personalityChipActive]}
+              onPress={() => handlePersonalityChange(p.value)}
+            >
+              <Text
+                style={[
+                  styles.personalityChipText,
+                  personality === p.value && styles.personalityChipTextActive,
+                ]}
+              >
+                {p.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       <ScrollView
@@ -127,8 +172,22 @@ export default function CoachScreen() {
         contentContainerStyle={styles.messagesContent}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
-        {messages.length === 0 && (
+        {messages.length === 0 && aiGate.loaded && (
           <View style={styles.emptyState}>
+            <DailyBriefingCard isPremium={!!aiGate.isPremium} personality={personality} />
+            <PostWorkoutInsightCard isPremium={!!aiGate.isPremium} personality={personality} />
+
+            <View style={styles.actionRow}>
+              <Pressable style={styles.actionCard} onPress={() => setRecalibrateOpen(true)}>
+                <Text style={styles.actionCardIcon}>🎚️</Text>
+                <Text style={styles.actionCardLabel}>Recalibrate Session</Text>
+              </Pressable>
+              <Pressable style={styles.actionCard} onPress={() => onNavigate?.('formCheck')}>
+                <Text style={styles.actionCardIcon}>📸</Text>
+                <Text style={styles.actionCardLabel}>Form Check</Text>
+              </Pressable>
+            </View>
+
             <View style={styles.cardGrid}>
               {RECOMMENDATION_CARDS.map((card) => (
                 <Pressable key={card.label} style={styles.card} onPress={() => send(card.prompt)}>
@@ -191,6 +250,14 @@ export default function CoachScreen() {
           <Text style={styles.sendButtonText}>Send</Text>
         </Pressable>
       </View>
+
+      <SessionRecalibrationModal
+        visible={recalibrateOpen}
+        onClose={() => setRecalibrateOpen(false)}
+        personality={personality}
+        canUse={aiGate.canUse}
+        onUsed={aiGate.refresh}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -219,6 +286,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
+  personalityRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  personalityChip: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  personalityChipActive: {
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
+  },
+  personalityChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: dark.textMuted,
+  },
+  personalityChipTextActive: {
+    color: '#0a0a0a',
+  },
   messagesScroll: {
     flex: 1,
   },
@@ -229,6 +320,30 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     paddingBottom: 8,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  actionCard: {
+    flex: 1,
+    backgroundColor: dark.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: dark.border,
+    alignItems: 'center',
+  },
+  actionCardIcon: {
+    fontSize: 22,
+    marginBottom: 6,
+  },
+  actionCardLabel: {
+    color: dark.text,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   cardGrid: {
     flexDirection: 'row',

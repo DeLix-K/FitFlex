@@ -15,6 +15,7 @@ import DigitalProductsScreen from './screens/DigitalProductsScreen';
 import EquipmentScanScreen from './screens/EquipmentScanScreen';
 import ExerciseListScreen from './screens/ExerciseListScreen';
 import FoodScanScreen from './screens/FoodScanScreen';
+import FormCheckScreen from './screens/FormCheckScreen';
 import HabitsScreen from './screens/HabitsScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import ManageVideosScreen from './screens/ManageVideosScreen';
@@ -124,7 +125,7 @@ export default function App() {
         <CartProvider>
         <AppShell session={session} activeTab={activeTab} onChangeTab={setActiveTab}>
           {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
-          {activeTab === 'coach' && <CoachScreen />}
+          {activeTab === 'coach' && <CoachScreen onNavigate={setActiveTab} />}
           {activeTab === 'streaks' && <StreaksScreen />}
           {activeTab === 'challenges' && <ChallengesScreen />}
           {activeTab === 'wearables' && <WearablesScreen />}
@@ -135,6 +136,7 @@ export default function App() {
           {activeTab === 'plans' && <PlansScreen session={session} />}
           {activeTab === 'scan' && <EquipmentScanScreen />}
           {activeTab === 'foodScan' && <FoodScanScreen />}
+          {activeTab === 'formCheck' && <FormCheckScreen />}
           {activeTab === 'nutrition' && <NutritionSearchScreen />}
           {activeTab === 'trainers' && <TrainersScreen />}
           {activeTab === 'trainerDashboard' && <TrainerDashboardScreen />}

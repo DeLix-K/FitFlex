@@ -16,6 +16,10 @@ import type { AiHistoryEntry, AiHistoryKind } from '../lib/types';
 const FILTERS: { label: string; value: AiHistoryKind | 'all' }[] = [
   { label: 'All', value: 'all' },
   { label: 'Coach', value: 'coach_chat' },
+  { label: 'Briefings', value: 'daily_briefing' },
+  { label: 'Insights', value: 'post_workout_insight' },
+  { label: 'Recalibration', value: 'session_recalibration' },
+  { label: 'Form Check', value: 'form_check' },
   { label: 'Wellness', value: 'mood_reflection' },
   { label: 'Sleep', value: 'sleep_insight' },
   { label: 'Exercises', value: 'exercise_explanation' },
@@ -26,6 +30,10 @@ const FILTERS: { label: string; value: AiHistoryKind | 'all' }[] = [
 
 const KIND_LABELS: Record<AiHistoryKind, string> = {
   coach_chat: 'AI Coach',
+  daily_briefing: 'Daily Briefing',
+  post_workout_insight: 'Post-Workout Insight',
+  session_recalibration: 'Session Recalibration',
+  form_check: 'Form Check',
   mood_reflection: 'Wellness',
   sleep_insight: 'Sleep',
   exercise_explanation: 'Exercise Explanation',
@@ -36,6 +44,10 @@ const KIND_LABELS: Record<AiHistoryKind, string> = {
 
 const KIND_COLORS: Record<AiHistoryKind, string> = {
   coach_chat: '#22d3ee',
+  daily_briefing: '#a3e635',
+  post_workout_insight: '#34d399',
+  session_recalibration: '#fbbf24',
+  form_check: '#f87171',
   mood_reflection: '#f472b6',
   sleep_insight: '#818cf8',
   exercise_explanation: '#c084fc',
