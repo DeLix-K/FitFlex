@@ -84,6 +84,17 @@ export default function PhotoScanScreen({
   const pickFrom = async (source: 'camera' | 'library') => {
     setError(null);
     try {
+      // The camera (unlike the photo library) never prompts on its own —
+      // launchCameraAsync throws MissingCameraPermissionException on iOS if
+      // permission hasn't been explicitly requested first.
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setError('Camera access is needed to take a photo. Enable it in Settings, or choose from your library instead.');
+          return;
+        }
+      }
+
       const options: ImagePicker.ImagePickerOptions = {
         mediaTypes: ['images'],
         base64: true,
