@@ -1,25 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { Platform } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 
+const UNAVAILABLE_MESSAGE = Platform.select({
+  ios: "Voice input needs Siri & Dictation enabled — turn it on in Settings > Siri & Search, or Settings > General > Keyboard > Enable Dictation, then try again.",
+  android: 'Voice input needs a voice recognition service enabled on your device (e.g. the Google app) — check your device settings, then try again.',
+  default: "Voice input isn't available on this device.",
+});
+
 // Wraps expo-speech-recognition (on-device iOS/Android speech recognition,
-// no cloud API/cost) into a simple "tap to speak, auto-sends on the final
-// transcript" flow. Falls back to unavailable (mic button hidden entirely
-// by the caller) on platforms without native speech recognition support,
-// e.g. web without the optional Web Speech polyfill this library also
-// offers -- not set up here since the mobile app is the real target.
+// also works via the browser's Web Speech API where present) into a simple
+// "tap to speak, auto-sends on the final transcript" flow. The mic button
+// stays visible even when recognition is currently unavailable -- tapping
+// it explains why (usually a system setting, e.g. Siri & Dictation being
+// off on iOS) rather than silently disappearing with no explanation.
 export function useVoiceInput(onFinalResult: (text: string) => void) {
-  const [available, setAvailable] = useState(false);
   const [listening, setListening] = useState(false);
   const [interimText, setInterimText] = useState('');
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      setAvailable(ExpoSpeechRecognitionModule.isRecognitionAvailable());
-    } catch {
-      setAvailable(false);
-    }
-  }, []);
 
   useSpeechRecognitionEvent('start', () => {
     setListening(true);
@@ -46,6 +44,8 @@ export function useVoiceInput(onFinalResult: (text: string) => void) {
     setInterimText('');
     if (event.error === 'not-allowed') {
       setError('Microphone or speech recognition permission was denied.');
+    } else if (event.error === 'service-not-allowed' || event.error === 'language-not-supported') {
+      setError(UNAVAILABLE_MESSAGE ?? null);
     } else if (event.error !== 'no-speech') {
       setError("Didn't catch that — please try again.");
     }
@@ -54,6 +54,17 @@ export function useVoiceInput(onFinalResult: (text: string) => void) {
   const startListening = useCallback(async () => {
     setError(null);
     try {
+      let recognitionAvailable = false;
+      try {
+        recognitionAvailable = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+      } catch {
+        recognitionAvailable = false;
+      }
+      if (!recognitionAvailable) {
+        setError(UNAVAILABLE_MESSAGE ?? null);
+        return;
+      }
+
       const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!result.granted) {
         setError('Microphone or speech recognition permission was denied.');
@@ -73,5 +84,5 @@ export function useVoiceInput(onFinalResult: (text: string) => void) {
     ExpoSpeechRecognitionModule.stop();
   }, []);
 
-  return { available, listening, interimText, error, startListening, stopListening };
+  return { listening, interimText, error, startListening, stopListening };
 }

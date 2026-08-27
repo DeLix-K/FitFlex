@@ -178,21 +178,19 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
             </Pressable>
           ))}
 
-          {voice.available && (
-            <Pressable
-              style={[styles.personalityChip, voiceRepliesOn && styles.personalityChipActive]}
-              onPress={() => {
-                if (voiceRepliesOn) stopSpeaking();
-                setVoiceRepliesOn((v) => !v);
-              }}
+          <Pressable
+            style={[styles.personalityChip, voiceRepliesOn && styles.personalityChipActive]}
+            onPress={() => {
+              if (voiceRepliesOn) stopSpeaking();
+              setVoiceRepliesOn((v) => !v);
+            }}
+          >
+            <Text
+              style={[styles.personalityChipText, voiceRepliesOn && styles.personalityChipTextActive]}
             >
-              <Text
-                style={[styles.personalityChipText, voiceRepliesOn && styles.personalityChipTextActive]}
-              >
-                {voiceRepliesOn ? '🔊 Speaks Replies' : '🔈 Speak Replies'}
-              </Text>
-            </Pressable>
-          )}
+              {voiceRepliesOn ? '🔊 Speaks Replies' : '🔈 Speak Replies'}
+            </Text>
+          </Pressable>
         </View>
       </View>
 
@@ -263,15 +261,13 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
       </ScrollView>
 
       <View style={styles.inputRow}>
-        {voice.available && (
-          <Pressable
-            style={[styles.micButton, voice.listening && styles.micButtonActive]}
-            onPress={() => (voice.listening ? voice.stopListening() : voice.startListening())}
-            disabled={sending}
-          >
-            <Text style={styles.micButtonText}>{voice.listening ? '⏹️' : '🎙️'}</Text>
-          </Pressable>
-        )}
+        <Pressable
+          style={[styles.micButton, voice.listening && styles.micButtonActive]}
+          onPress={() => (voice.listening ? voice.stopListening() : voice.startListening())}
+          disabled={sending}
+        >
+          <Text style={styles.micButtonText}>{voice.listening ? '⏹️' : '🎙️'}</Text>
+        </Pressable>
         <TextInput
           style={styles.input}
           placeholder={voice.listening ? 'Listening...' : 'Ask your coach...'}
