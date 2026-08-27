@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { LeaderboardEntry } from './types';
+import type { LeaderboardEntry, StreakFreezeBalance } from './types';
 
 function todayLocalDate(): string {
   const now = new Date();
@@ -24,7 +24,7 @@ export async function hasLoggedToday(): Promise<boolean> {
   return !!data;
 }
 
-export async function logWorkoutToday(): Promise<void> {
+export async function logWorkoutToday(durationMinutes?: number | null): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) throw new Error('Not signed in.');
@@ -32,7 +32,11 @@ export async function logWorkoutToday(): Promise<void> {
   const { error } = await supabase
     .from('workout_logs')
     .upsert(
-      { user_id: userId, logged_date: todayLocalDate() },
+      {
+        user_id: userId,
+        logged_date: todayLocalDate(),
+        duration_minutes: durationMinutes ?? null,
+      },
       { onConflict: 'user_id,logged_date', ignoreDuplicates: true }
     );
 
@@ -84,6 +88,25 @@ export async function fetchLoggedDates(startDate: string, endDate: string): Prom
   return new Set((data ?? []).map((r) => r.logged_date as string));
 }
 
+// Which dates in the given range are covered by a spent streak freeze
+// (shown distinctly on the calendar, e.g. a snowflake, from a real logged
+// workout).
+export async function fetchFreezeCoveredDates(startDate: string, endDate: string): Promise<Set<string>> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return new Set();
+
+  const { data, error } = await supabase
+    .from('streak_freeze_uses')
+    .select('covered_date')
+    .eq('user_id', userId)
+    .gte('covered_date', startDate)
+    .lte('covered_date', endDate);
+
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r) => r.covered_date as string));
+}
+
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   const { data, error } = await supabase
     .from('leaderboard')
@@ -107,4 +130,85 @@ export async function updateDisplayName(name: string): Promise<void> {
     .eq('id', userId);
 
   if (error) throw new Error(error.message);
+}
+
+export async function fetchWeeklyTarget(): Promise<number> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return 5;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('weekly_workout_target')
+    .eq('id', userId)
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data?.weekly_workout_target ?? 5;
+}
+
+export async function updateWeeklyTarget(target: number): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ weekly_workout_target: target })
+    .eq('id', userId);
+
+  if (error) throw new Error(error.message);
+}
+
+// Sum of real logged session durations. Only counts days where a duration
+// was actually entered -- silently skips days logged without one, rather
+// than guessing.
+export async function fetchTotalDurationMinutes(): Promise<{ totalMinutes: number; sessionsWithDuration: number }> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return { totalMinutes: 0, sessionsWithDuration: 0 };
+
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .select('duration_minutes')
+    .eq('user_id', userId)
+    .not('duration_minutes', 'is', null);
+
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as { duration_minutes: number }[];
+  return {
+    totalMinutes: rows.reduce((sum, r) => sum + r.duration_minutes, 0),
+    sessionsWithDuration: rows.length,
+  };
+}
+
+export async function fetchStreakFreezeBalance(): Promise<StreakFreezeBalance | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from('streak_freezes')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// Recomputes the real current streak server-side and grants any newly
+// earned freezes (server-enforced via a SECURITY DEFINER function -- the
+// client never sets its own balance directly). Safe to call on every
+// Streaks screen load.
+export async function grantStreakFreezeIfEarned(): Promise<number> {
+  const { data, error } = await supabase.rpc('grant_streak_freeze_if_earned');
+  if (error) throw new Error(error.message);
+  return data as number;
+}
+
+export async function useStreakFreeze(coveredDate: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('use_streak_freeze', { p_covered_date: coveredDate });
+  if (error) throw new Error(error.message);
+  return data as boolean;
 }

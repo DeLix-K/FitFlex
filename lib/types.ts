@@ -84,7 +84,15 @@ export type WorkoutLog = {
   user_id: string;
   logged_date: string;
   workout_plan_id: string | null;
+  duration_minutes: number | null;
   created_at: string;
+};
+
+export type StreakFreezeBalance = {
+  user_id: string;
+  balance: number;
+  highest_rewarded_streak: number;
+  updated_at: string;
 };
 
 export type LeaderboardEntry = {
