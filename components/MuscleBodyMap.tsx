@@ -1,77 +1,54 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Rect } from 'react-native-svg';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { dark } from '../lib/theme';
 
-type Region = { key: string; label: string; shape: 'rect' | 'circle'; x: number; y: number; w: number; h: number; rx?: number };
+// Source renders are 340x495 (front) / 340x485 (back) -- hit-regions below
+// are hand-calibrated against those exact pixel dimensions, then scaled to
+// whatever DISPLAY_WIDTH the map renders at. The artwork itself is a single
+// flat image with every muscle already rendered green, so "selecting" a
+// muscle can't recolor the pixel art directly (there's no per-muscle mask) --
+// instead a translucent ring is drawn over the tapped region, and the
+// matching label chip below highlights, same as the reference mockup shows
+// happening to the active chip.
+const DISPLAY_WIDTH = 230;
+const FRONT_SRC = { w: 340, h: 495 };
+const BACK_SRC = { w: 340, h: 485 };
 
-// A deliberately stylized, non-anatomical silhouette (blocky regions, not
-// muscle fibers) -- a tappable filter surface, not a medical diagram.
-// Shared regions (head/shoulders/arms/legs) appear in both views; chest
-// swaps for back, biceps for triceps, quadriceps for hamstrings, and the
-// back view adds glutes, matching how the human body actually differs
-// front-to-back.
+type Region = { key: string; x: number; y: number; w: number; h: number; round?: boolean };
+
 const FRONT_REGIONS: Region[] = [
-  { key: 'shoulders', label: 'Shoulders', shape: 'circle', x: 38, y: 62, w: 20, h: 20 },
-  { key: 'shoulders', label: 'Shoulders', shape: 'circle', x: 122, y: 62, w: 20, h: 20 },
-  { key: 'chest', label: 'Chest', shape: 'rect', x: 55, y: 58, w: 50, h: 42, rx: 10 },
-  { key: 'biceps', label: 'Biceps', shape: 'rect', x: 20, y: 75, w: 20, h: 55, rx: 8 },
-  { key: 'biceps', label: 'Biceps', shape: 'rect', x: 120, y: 75, w: 20, h: 55, rx: 8 },
-  { key: 'core', label: 'Core', shape: 'rect', x: 60, y: 102, w: 40, h: 48, rx: 8 },
-  { key: 'quadriceps', label: 'Quadriceps', shape: 'rect', x: 55, y: 165, w: 22, h: 65, rx: 8 },
-  { key: 'quadriceps', label: 'Quadriceps', shape: 'rect', x: 83, y: 165, w: 22, h: 65, rx: 8 },
+  { key: 'shoulders', x: 50, y: 76, w: 58, h: 62, round: true },
+  { key: 'shoulders', x: 232, y: 76, w: 58, h: 62, round: true },
+  { key: 'chest', x: 103, y: 78, w: 134, h: 72 },
+  { key: 'biceps', x: 30, y: 140, w: 58, h: 92 },
+  { key: 'biceps', x: 252, y: 140, w: 58, h: 92 },
+  { key: 'core', x: 113, y: 152, w: 114, h: 105 },
+  { key: 'quadriceps', x: 100, y: 262, w: 64, h: 150 },
+  { key: 'quadriceps', x: 176, y: 262, w: 64, h: 150 },
 ];
 
 const BACK_REGIONS: Region[] = [
-  { key: 'shoulders', label: 'Shoulders', shape: 'circle', x: 38, y: 62, w: 20, h: 20 },
-  { key: 'shoulders', label: 'Shoulders', shape: 'circle', x: 122, y: 62, w: 20, h: 20 },
-  { key: 'back', label: 'Back', shape: 'rect', x: 55, y: 58, w: 50, h: 42, rx: 10 },
-  { key: 'triceps', label: 'Triceps', shape: 'rect', x: 20, y: 75, w: 20, h: 55, rx: 8 },
-  { key: 'triceps', label: 'Triceps', shape: 'rect', x: 120, y: 75, w: 20, h: 55, rx: 8 },
-  { key: 'glutes', label: 'Glutes', shape: 'rect', x: 58, y: 102, w: 44, h: 30, rx: 10 },
-  { key: 'hamstrings', label: 'Hamstrings', shape: 'rect', x: 55, y: 136, w: 22, h: 65, rx: 8 },
-  { key: 'hamstrings', label: 'Hamstrings', shape: 'rect', x: 83, y: 136, w: 22, h: 65, rx: 8 },
+  { key: 'shoulders', x: 50, y: 70, w: 58, h: 62, round: true },
+  { key: 'shoulders', x: 232, y: 70, w: 58, h: 62, round: true },
+  { key: 'back', x: 103, y: 70, w: 134, h: 112 },
+  { key: 'triceps', x: 30, y: 133, w: 58, h: 92 },
+  { key: 'triceps', x: 252, y: 133, w: 58, h: 92 },
+  { key: 'glutes', x: 113, y: 188, w: 114, h: 68 },
+  { key: 'hamstrings', x: 100, y: 256, w: 64, h: 150 },
+  { key: 'hamstrings', x: 176, y: 256, w: 64, h: 150 },
 ];
 
-function RegionShape({
-  region,
-  active,
-  onPress,
-}: {
-  region: Region;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const fill = active ? dark.accent : 'rgba(255,255,255,0.08)';
-  const stroke = active ? dark.accent : 'rgba(255,255,255,0.2)';
-
-  if (region.shape === 'circle') {
-    return (
-      <Circle
-        cx={region.x + region.w / 2}
-        cy={region.y + region.h / 2}
-        r={region.w / 2}
-        fill={fill}
-        stroke={stroke}
-        strokeWidth={1}
-        onPress={onPress}
-      />
-    );
-  }
-  return (
-    <Rect
-      x={region.x}
-      y={region.y}
-      width={region.w}
-      height={region.h}
-      rx={region.rx ?? 6}
-      fill={fill}
-      stroke={stroke}
-      strokeWidth={1}
-      onPress={onPress}
-    />
-  );
-}
+const REGION_LABEL: Record<string, string> = {
+  shoulders: 'Shoulders',
+  chest: 'Chest',
+  biceps: 'Biceps',
+  core: 'Core',
+  quadriceps: 'Quadriceps',
+  back: 'Back',
+  triceps: 'Triceps',
+  glutes: 'Glutes',
+  hamstrings: 'Hamstrings',
+};
 
 export default function MuscleBodyMap({
   availableMuscles,
@@ -83,13 +60,15 @@ export default function MuscleBodyMap({
   onSelect: (muscle: string | null) => void;
 }) {
   const [view, setView] = useState<'front' | 'back'>('front');
+  const src = view === 'front' ? FRONT_SRC : BACK_SRC;
   const regions = view === 'front' ? FRONT_REGIONS : BACK_REGIONS;
+  const scale = DISPLAY_WIDTH / src.w;
+  const displayHeight = src.h * scale;
+
   const mappedKeys = new Set([...FRONT_REGIONS, ...BACK_REGIONS].map((r) => r.key));
   const unmappedMuscles = availableMuscles.filter((m) => !mappedKeys.has(m));
 
-  const handleTap = (key: string) => {
-    onSelect(selected === key ? null : key);
-  };
+  const handleTap = (key: string) => onSelect(selected === key ? null : key);
 
   return (
     <View style={styles.card}>
@@ -102,38 +81,71 @@ export default function MuscleBodyMap({
         </Pressable>
       </View>
 
-      <View style={styles.svgWrap}>
-        <Svg width={160} height={250} viewBox="0 0 160 250">
-          <Circle cx={80} cy={30} r={18} fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
-          {regions.map((region, i) => (
-            <RegionShape key={`${region.key}-${i}`} region={region} active={selected === region.key} onPress={() => handleTap(region.key)} />
-          ))}
-        </Svg>
+      <View style={[styles.imageWrap, { width: DISPLAY_WIDTH, height: displayHeight }]}>
+        <Image
+          source={view === 'front' ? require('../assets/exercises/body_front.png') : require('../assets/exercises/body_back.png')}
+          style={{ width: DISPLAY_WIDTH, height: displayHeight }}
+          resizeMode="contain"
+        />
+        {regions.map((region, i) => {
+          const active = selected === region.key;
+          return (
+            <Pressable
+              key={`${region.key}-${i}`}
+              onPress={() => handleTap(region.key)}
+              style={[
+                styles.hitRegion,
+                {
+                  left: region.x * scale,
+                  top: region.y * scale,
+                  width: region.w * scale,
+                  height: region.h * scale,
+                  borderRadius: region.round ? (region.w * scale) / 2 : 10,
+                },
+                active && styles.hitRegionActive,
+              ]}
+            />
+          );
+        })}
+      </View>
+
+      <View style={styles.infoCard}>
+        <Text style={styles.infoTitle}>◎ {view === 'front' ? 'Front' : 'Back'} View</Text>
+        <Text style={styles.infoBody}>Select a muscle group to see exercises and workouts.</Text>
+        <View style={styles.infoDivider} />
+        <Text style={styles.infoTitle}>💡 Tip</Text>
+        <Text style={styles.infoBody}>Tap on any muscle group to highlight exercises.</Text>
       </View>
 
       <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendSwatch, { backgroundColor: dark.accent }]} />
+          <Text style={styles.legendText}>Selected Muscle</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendSwatch, { backgroundColor: dark.border }]} />
+          <Text style={styles.legendText}>Other Muscles</Text>
+        </View>
+      </View>
+
+      <View style={styles.chipsRow}>
         {[...new Set(regions.map((r) => r.key))].map((key) => {
-          const label = regions.find((r) => r.key === key)?.label ?? key;
           const active = selected === key;
           return (
-            <Pressable key={key} style={[styles.legendChip, active && styles.legendChipActive]} onPress={() => handleTap(key)}>
-              <Text style={[styles.legendChipText, active && styles.legendChipTextActive]}>{label}</Text>
+            <Pressable key={key} style={[styles.chip, active && styles.chipActive]} onPress={() => handleTap(key)}>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{REGION_LABEL[key]}</Text>
             </Pressable>
           );
         })}
       </View>
 
       {unmappedMuscles.length > 0 && (
-        <View style={styles.legendRow}>
+        <View style={styles.chipsRow}>
           {unmappedMuscles.map((m) => {
             const active = selected === m;
             return (
-              <Pressable
-                key={m}
-                style={[styles.legendChip, active && styles.legendChipActive]}
-                onPress={() => onSelect(selected === m ? null : m)}
-              >
-                <Text style={[styles.legendChipText, active && styles.legendChipTextActive]}>{m}</Text>
+              <Pressable key={m} style={[styles.chip, active && styles.chipActive]} onPress={() => onSelect(selected === m ? null : m)}>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{m}</Text>
               </Pressable>
             );
           })}
@@ -156,7 +168,7 @@ const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   toggle: {
     borderWidth: 1,
@@ -177,16 +189,71 @@ const styles = StyleSheet.create({
   toggleTextActive: {
     color: dark.accent,
   },
-  svgWrap: {
-    marginBottom: 10,
+  imageWrap: {
+    marginBottom: 14,
+    position: 'relative',
+  },
+  hitRegion: {
+    position: 'absolute',
+    borderWidth: 0,
+  },
+  hitRegionActive: {
+    borderWidth: 2,
+    borderColor: dark.accent,
+    backgroundColor: 'rgba(163, 230, 53, 0.18)',
+  },
+  infoCard: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+  },
+  infoTitle: {
+    color: dark.accent,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  infoBody: {
+    color: dark.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: dark.border,
+    marginVertical: 10,
   },
   legendRow: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 14,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendSwatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+  },
+  legendText: {
+    color: dark.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
     justifyContent: 'center',
   },
-  legendChip: {
+  chip: {
     borderWidth: 1,
     borderColor: dark.border,
     borderRadius: 12,
@@ -194,17 +261,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginBottom: 6,
   },
-  legendChipActive: {
+  chipActive: {
     borderColor: dark.accent,
     backgroundColor: dark.surfaceElevated,
   },
-  legendChipText: {
+  chipText: {
     color: dark.textFaint,
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
-  legendChipTextActive: {
+  chipTextActive: {
     color: dark.accent,
   },
 });
