@@ -48,13 +48,13 @@
       ],
       "expo-sharing",
       "expo-audio",
+      "./plugins/withoutPushEntitlement.js",
       [
         "expo-notifications",
         {
           "color": "#a3e635"
         }
-      ],
-      "./plugins/withoutPushEntitlement.js"
+      ]
     ],
     "extra": {
       "eas": {

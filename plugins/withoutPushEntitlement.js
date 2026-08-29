@@ -10,7 +10,15 @@ const { withEntitlementsPlist } = require('expo/config-plugins');
 // entitlement." Local notifications don't need this entitlement at all, so
 // strip it back out after expo-notifications adds it, rather than touching
 // Apple Developer portal capabilities for a feature that doesn't need them.
-// Must be listed in app.json's plugins array AFTER expo-notifications.
+//
+// Mod ordering gotcha: Expo's mod chain wraps each newly-registered mod
+// AROUND the previously-registered one and runs the new (outer) mod's
+// action FIRST, then delegates down to the previous (inner) one via
+// `nextMod` -- so mods actually execute in REVERSE of their plugins-array
+// registration order. To have this run AFTER expo-notifications adds the
+// entitlement, it must be listed BEFORE expo-notifications in app.json's
+// plugins array (so expo-notifications is registered later/outer and its
+// add-action runs first, then delegates down to this delete-action).
 module.exports = function withoutPushEntitlement(config) {
   return withEntitlementsPlist(config, (config) => {
     delete config.modResults['aps-environment'];
