@@ -25,3 +25,20 @@ export const dark = {
   border: '#2a2a2a',
   danger: '#f87171',
 } as const;
+
+// A deliberately different "temperature" from `dark` (which is the sharp,
+// high-contrast lime-on-black used by the workout/fitness tabs): softer,
+// warmer, teal-leaning, used only by the Wellness tab per the design brief
+// asking for visual contrast between "train hard" and "recover well."
+export const calm = {
+  background: '#141b20',
+  surface: '#1c2830',
+  surfaceElevated: '#25333d',
+  accent: '#5eead4',
+  accentDark: '#0d9488',
+  text: '#f0fdfa',
+  textMuted: '#9db3ae',
+  textFaint: '#6b8480',
+  border: '#2d3f45',
+  danger: '#fca5a5',
+} as const;

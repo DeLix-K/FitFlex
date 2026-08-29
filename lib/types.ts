@@ -69,7 +69,8 @@ export type AiHistoryKind =
   | 'post_workout_insight'
   | 'session_recalibration'
   | 'form_check'
-  | 'bedtime_story';
+  | 'bedtime_story'
+  | 'wellness_recommendation';
 
 export type AiHistoryEntry = {
   id: string;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -10,13 +10,24 @@ import {
   View,
 } from 'react-native';
 import AiUsageIndicator from '../components/AiUsageIndicator';
+import BinauralBeatsLibrary from '../components/BinauralBeatsLibrary';
+import BreathworkSphere from '../components/BreathworkSphere';
+import HabitStackSuggestion from '../components/HabitStackSuggestion';
+import SleepPerformanceInsight from '../components/SleepPerformanceInsight';
+import StressInterrupter from '../components/StressInterrupter';
+import WellnessRecommendationCard from '../components/WellnessRecommendationCard';
+import WellnessReadinessGauge from '../components/WellnessReadinessGauge';
+import WellnessTipCarousel from '../components/WellnessTipCarousel';
 import { useAiGate } from '../hooks/useAiGate';
 import { getOuraData } from '../lib/oura';
-import { dark } from '../lib/theme';
+import { fetchSleepHistory } from '../lib/sleep';
+import { hasLoggedToday } from '../lib/streaks';
+import { calm } from '../lib/theme';
 import type { MoodLog } from '../lib/types';
 import {
   fetchHydrationToday,
   fetchMoodHistory,
+  getTodayPrompt,
   logMood,
   reflectOnMood,
   setHydrationToday,
@@ -33,20 +44,12 @@ const MOODS: { value: number; emoji: string; label: string }[] = [
 
 const SCALE_LABELS = ['1', '2', '3', '4', '5'];
 const HYDRATION_GOAL = 8;
-const BREATH_PHASES = ['Breathe in...', 'Hold...', 'Breathe out...', 'Hold...'];
-const BREATH_PHASE_SECONDS = 4;
 
 function moodEmoji(mood: number): string {
   return MOODS.find((m) => m.value === mood)?.emoji ?? '😐';
 }
 
-function ScaleRow({
-  value,
-  onChange,
-}: {
-  value: number | null;
-  onChange: (v: number) => void;
-}) {
+function ScaleRow({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
   return (
     <View style={styles.scaleRow}>
       {SCALE_LABELS.map((label, i) => {
@@ -76,27 +79,31 @@ export default function WellnessScreen() {
   const [saving, setSaving] = useState(false);
   const [reflecting, setReflecting] = useState(false);
   const [recoveryScore, setRecoveryScore] = useState<number | null>(null);
+  const [sleepHours, setSleepHours] = useState<number | null>(null);
+  const [workoutLoggedToday, setWorkoutLoggedToday] = useState(false);
   const [glasses, setGlasses] = useState(0);
-  const [breathPhaseIndex, setBreathPhaseIndex] = useState<number | null>(null);
-  const [breathSecondsLeft, setBreathSecondsLeft] = useState(BREATH_PHASE_SECONDS);
   const [error, setError] = useState<string | null>(null);
   const aiGate = useAiGate();
-  const breathTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const today = todayLocalDate();
   const todayEntry = history.find((h) => h.log_date === today) ?? null;
+  const todayPrompt = useMemo(getTodayPrompt, []);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [data, hydration, oura] = await Promise.all([
+      const [data, hydration, oura, latestSleep, workoutToday] = await Promise.all([
         fetchMoodHistory(),
         fetchHydrationToday(todayLocalDate()),
         getOuraData().catch(() => ({ connected: false }) as const),
+        fetchSleepHistory(1).catch(() => []),
+        hasLoggedToday().catch(() => false),
       ]);
       setHistory(data);
       setGlasses(hydration);
       setRecoveryScore('connected' in oura && oura.connected ? oura.recoveryScore : null);
+      setSleepHours(latestSleep[0]?.duration_minutes != null ? latestSleep[0].duration_minutes / 60 : null);
+      setWorkoutLoggedToday(workoutToday);
       const existing = data.find((h) => h.log_date === todayLocalDate());
       if (existing) {
         setMood(existing.mood);
@@ -114,12 +121,6 @@ export default function WellnessScreen() {
     load().finally(() => setLoading(false));
   }, [load]);
 
-  useEffect(() => {
-    return () => {
-      if (breathTimer.current) clearInterval(breathTimer.current);
-    };
-  }, []);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
@@ -128,7 +129,7 @@ export default function WellnessScreen() {
 
   const handleSave = async () => {
     if (mood == null) {
-      setError('Pick how you\'re feeling first.');
+      setError("Pick how you're feeling first.");
       return;
     }
     setSaving(true);
@@ -172,29 +173,6 @@ export default function WellnessScreen() {
     }
   };
 
-  const startBreathing = () => {
-    if (breathTimer.current) clearInterval(breathTimer.current);
-    setBreathPhaseIndex(0);
-    setBreathSecondsLeft(BREATH_PHASE_SECONDS);
-    let phase = 0;
-    let seconds = BREATH_PHASE_SECONDS;
-    breathTimer.current = setInterval(() => {
-      seconds -= 1;
-      if (seconds <= 0) {
-        phase = (phase + 1) % BREATH_PHASES.length;
-        seconds = BREATH_PHASE_SECONDS;
-      }
-      setBreathPhaseIndex(phase);
-      setBreathSecondsLeft(seconds);
-    }, 1000);
-  };
-
-  const stopBreathing = () => {
-    if (breathTimer.current) clearInterval(breathTimer.current);
-    breathTimer.current = null;
-    setBreathPhaseIndex(null);
-  };
-
   const wellnessScore = useMemo(() => {
     const components: number[] = [];
     if (mood != null) components.push((mood - 1) * 25);
@@ -205,18 +183,10 @@ export default function WellnessScreen() {
     return Math.round(components.reduce((a, b) => a + b, 0) / components.length);
   }, [mood, energy, stress, recoveryScore]);
 
-  const scoreLabel = (score: number | null) => {
-    if (score == null) return 'Check in below to see your score';
-    if (score >= 80) return "You're doing great";
-    if (score >= 60) return "You're doing well";
-    if (score >= 40) return 'Take it easy today';
-    return 'Be gentle with yourself today';
-  };
-
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={dark.accent} />
+        <ActivityIndicator color={calm.accent} />
       </View>
     );
   }
@@ -225,19 +195,35 @@ export default function WellnessScreen() {
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={calm.accent} />}
       ListHeaderComponent={
         <>
           <Text style={styles.title}>Wellness</Text>
           <Text style={styles.subtitle}>
-            Check in with how you're feeling. This isn't a substitute for professional support —
-            if you're struggling, please reach out to someone who can help.
+            This isn't a substitute for professional support — if you're struggling, please reach
+            out to someone who can help.
           </Text>
+          {error && <Text style={styles.error}>{error}</Text>}
 
-          <View style={styles.scoreCard}>
-            <Text style={styles.scoreValue}>{wellnessScore != null ? `${wellnessScore}/100` : '—'}</Text>
-            <Text style={styles.scoreLabel}>{scoreLabel(wellnessScore)}</Text>
-          </View>
+          <WellnessReadinessGauge score={wellnessScore} />
+
+          <WellnessRecommendationCard
+            isPremium={!!aiGate.isPremium}
+            wellnessScore={wellnessScore}
+            mood={mood}
+            stress={stress}
+            energy={energy}
+            recoveryScore={recoveryScore}
+            sleepHours={sleepHours}
+          />
+
+          <StressInterrupter />
+
+          <HabitStackSuggestion
+            visible={workoutLoggedToday && glasses < 2}
+            glasses={glasses}
+            onAddGlass={() => adjustGlasses(1)}
+          />
 
           <View style={styles.sectionsGrid}>
             <View style={styles.sectionBox}>
@@ -262,12 +248,7 @@ export default function WellnessScreen() {
             </View>
           </View>
 
-          <AiUsageIndicator
-            isPremium={aiGate.isPremium}
-            remaining={aiGate.remaining}
-            loaded={aiGate.loaded}
-          />
-          {error && <Text style={styles.error}>{error}</Text>}
+          <AiUsageIndicator isPremium={aiGate.isPremium} remaining={aiGate.remaining} loaded={aiGate.loaded} />
 
           <View style={styles.form}>
             <Text style={styles.formLabel}>How are you feeling today?</Text>
@@ -279,11 +260,7 @@ export default function WellnessScreen() {
                   onPress={() => setMood(m.value)}
                 >
                   <Text style={styles.moodEmoji}>{m.emoji}</Text>
-                  <Text
-                    style={[styles.moodLabel, mood === m.value && styles.moodLabelSelected]}
-                  >
-                    {m.label}
-                  </Text>
+                  <Text style={[styles.moodLabel, mood === m.value && styles.moodLabelSelected]}>{m.label}</Text>
                 </Pressable>
               ))}
             </View>
@@ -294,10 +271,11 @@ export default function WellnessScreen() {
             <Text style={styles.formLabel}>Energy level</Text>
             <ScaleRow value={energy} onChange={setEnergy} />
 
+            <Text style={styles.formLabel}>💭 {todayPrompt}</Text>
             <TextInput
               style={styles.notesInput}
-              placeholder="What's on your mind? (optional)"
-              placeholderTextColor={dark.textFaint}
+              placeholder="30 seconds is enough (optional)"
+              placeholderTextColor={calm.textFaint}
               value={notes}
               onChangeText={setNotes}
               multiline
@@ -305,22 +283,16 @@ export default function WellnessScreen() {
 
             <Pressable style={styles.saveButton} onPress={handleSave} disabled={saving}>
               {saving ? (
-                <ActivityIndicator color="#0a0a0a" size="small" />
+                <ActivityIndicator color="#0a2420" size="small" />
               ) : (
-                <Text style={styles.saveButtonText}>
-                  {todayEntry ? 'Update Today\'s Check-in' : 'Save Check-in'}
-                </Text>
+                <Text style={styles.saveButtonText}>{todayEntry ? "Update Today's Check-in" : 'Save Check-in'}</Text>
               )}
             </Pressable>
 
             {todayEntry && !todayEntry.ai_reflection && (
-              <Pressable
-                style={styles.reflectButton}
-                onPress={handleReflect}
-                disabled={reflecting}
-              >
+              <Pressable style={styles.reflectButton} onPress={handleReflect} disabled={reflecting}>
                 {reflecting ? (
-                  <ActivityIndicator color={dark.accent} size="small" />
+                  <ActivityIndicator color={calm.accent} size="small" />
                 ) : (
                   <Text style={styles.reflectButtonText}>Reflect with AI</Text>
                 )}
@@ -337,14 +309,11 @@ export default function WellnessScreen() {
 
           <Text style={styles.sectionTitle}>💧 Hydration</Text>
           <View style={styles.hydrationCard}>
-            <Text style={styles.hydrationValue}>{glasses} / {HYDRATION_GOAL} glasses</Text>
+            <Text style={styles.hydrationValue}>
+              {glasses} / {HYDRATION_GOAL} glasses
+            </Text>
             <View style={styles.hydrationTrack}>
-              <View
-                style={[
-                  styles.hydrationFill,
-                  { width: `${Math.min(100, (glasses / HYDRATION_GOAL) * 100)}%` },
-                ]}
-              />
+              <View style={[styles.hydrationFill, { width: `${Math.min(100, (glasses / HYDRATION_GOAL) * 100)}%` }]} />
             </View>
             <View style={styles.hydrationButtons}>
               <Pressable style={styles.hydrationButton} onPress={() => adjustGlasses(-1)}>
@@ -356,22 +325,13 @@ export default function WellnessScreen() {
             </View>
           </View>
 
-          <Text style={styles.sectionTitle}>🧘 Mindfulness & Breathing</Text>
-          <View style={styles.breathCard}>
-            {breathPhaseIndex != null ? (
-              <>
-                <Text style={styles.breathPhase}>{BREATH_PHASES[breathPhaseIndex]}</Text>
-                <Text style={styles.breathCountdown}>{breathSecondsLeft}</Text>
-                <Pressable style={styles.breathStopButton} onPress={stopBreathing}>
-                  <Text style={styles.breathStopButtonText}>Stop</Text>
-                </Pressable>
-              </>
-            ) : (
-              <Pressable style={styles.breathStartButton} onPress={startBreathing}>
-                <Text style={styles.breathStartButtonText}>Start Breathing Exercise</Text>
-              </Pressable>
-            )}
-          </View>
+          <BreathworkSphere isPremium={!!aiGate.isPremium} />
+
+          <BinauralBeatsLibrary isPremium={!!aiGate.isPremium} />
+
+          <SleepPerformanceInsight isPremium={!!aiGate.isPremium} />
+
+          <WellnessTipCarousel />
 
           <Text style={styles.sectionTitle}>Recent Check-ins</Text>
         </>
@@ -395,7 +355,7 @@ export default function WellnessScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: dark.background,
+    backgroundColor: calm.background,
   },
   content: {
     paddingHorizontal: 20,
@@ -404,41 +364,25 @@ const styles = StyleSheet.create({
   },
   centered: {
     flex: 1,
-    backgroundColor: dark.background,
+    backgroundColor: calm.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
-    color: dark.text,
+    color: calm.text,
     fontSize: 22,
     fontWeight: '700',
   },
   subtitle: {
     fontSize: 13,
-    color: dark.textFaint,
+    color: calm.textFaint,
     marginTop: 4,
     marginBottom: 16,
     lineHeight: 18,
   },
-  scoreCard: {
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 20,
-    paddingVertical: 20,
+  error: {
+    color: calm.danger,
     marginBottom: 12,
-  },
-  scoreValue: {
-    color: dark.text,
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  scoreLabel: {
-    color: dark.accent,
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 4,
   },
   sectionsGrid: {
     flexDirection: 'row',
@@ -449,9 +393,9 @@ const styles = StyleSheet.create({
   sectionBox: {
     width: '48%',
     borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 14,
+    borderColor: calm.border,
+    backgroundColor: calm.surface,
+    borderRadius: 16,
     padding: 14,
   },
   sectionIcon: {
@@ -459,32 +403,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionLabel: {
-    color: dark.textFaint,
+    color: calm.textFaint,
     fontSize: 11,
     fontWeight: '700',
   },
   sectionValue: {
-    color: dark.text,
+    color: calm.text,
     fontSize: 16,
     fontWeight: '700',
     marginTop: 2,
   },
-  error: {
-    color: dark.danger,
-    marginBottom: 12,
-  },
   form: {
     borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 12,
+    borderColor: calm.border,
+    backgroundColor: calm.surface,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 20,
   },
   formLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: dark.text,
+    color: calm.text,
     marginBottom: 10,
     marginTop: 6,
   },
@@ -497,26 +437,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 6,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'transparent',
     flex: 1,
   },
   moodButtonSelected: {
-    backgroundColor: dark.surfaceElevated,
-    borderColor: dark.accent,
+    backgroundColor: calm.surfaceElevated,
+    borderColor: calm.accent,
   },
   moodEmoji: {
     fontSize: 24,
   },
   moodLabel: {
     fontSize: 10,
-    color: dark.textFaint,
+    color: calm.textFaint,
     marginTop: 4,
     textAlign: 'center',
   },
   moodLabelSelected: {
-    color: dark.accent,
+    color: calm.accent,
     fontWeight: '600',
   },
   scaleRow: {
@@ -529,28 +469,28 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: dark.border,
+    borderColor: calm.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   scaleDotSelected: {
-    backgroundColor: dark.accent,
-    borderColor: dark.accent,
+    backgroundColor: calm.accent,
+    borderColor: calm.accent,
   },
   scaleDotText: {
     fontSize: 13,
     fontWeight: '600',
-    color: dark.text,
+    color: calm.text,
   },
   scaleDotTextSelected: {
-    color: '#0a0a0a',
+    color: '#0a2420',
   },
   notesInput: {
     borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surfaceElevated,
-    color: dark.text,
-    borderRadius: 8,
+    borderColor: calm.border,
+    backgroundColor: calm.surfaceElevated,
+    color: calm.text,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
@@ -560,60 +500,60 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   saveButton: {
-    backgroundColor: dark.accent,
-    borderRadius: 8,
+    backgroundColor: calm.accent,
+    borderRadius: 20,
     paddingVertical: 12,
     alignItems: 'center',
   },
   saveButtonText: {
-    color: '#0a0a0a',
+    color: '#0a2420',
     fontWeight: '700',
   },
   reflectButton: {
     marginTop: 12,
     borderWidth: 1,
-    borderColor: dark.accent,
-    borderRadius: 8,
+    borderColor: calm.accent,
+    borderRadius: 20,
     paddingVertical: 12,
     alignItems: 'center',
   },
   reflectButtonText: {
-    color: dark.accent,
+    color: calm.accent,
     fontWeight: '700',
   },
   reflectionCard: {
     marginTop: 12,
-    backgroundColor: dark.surfaceElevated,
-    borderRadius: 8,
+    backgroundColor: calm.surfaceElevated,
+    borderRadius: 12,
     padding: 12,
   },
   reflectionLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: dark.textMuted,
+    color: calm.textMuted,
     marginBottom: 4,
   },
   reflectionText: {
     fontSize: 13,
-    color: dark.text,
+    color: calm.text,
     lineHeight: 19,
   },
   sectionTitle: {
-    color: dark.text,
+    color: calm.text,
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 10,
   },
   hydrationCard: {
     borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 14,
+    borderColor: calm.border,
+    backgroundColor: calm.surface,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 20,
   },
   hydrationValue: {
-    color: dark.text,
+    color: calm.text,
     fontSize: 15,
     fontWeight: '700',
     marginBottom: 8,
@@ -621,14 +561,14 @@ const styles = StyleSheet.create({
   hydrationTrack: {
     height: 10,
     borderRadius: 5,
-    backgroundColor: dark.surfaceElevated,
+    backgroundColor: calm.surfaceElevated,
     overflow: 'hidden',
     marginBottom: 12,
   },
   hydrationFill: {
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#38bdf8',
+    backgroundColor: calm.accent,
   },
   hydrationButtons: {
     flexDirection: 'row',
@@ -637,60 +577,18 @@ const styles = StyleSheet.create({
   hydrationButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: dark.border,
-    borderRadius: 8,
+    borderColor: calm.border,
+    borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
   },
   hydrationButtonText: {
-    color: dark.text,
+    color: calm.text,
     fontSize: 18,
     fontWeight: '700',
   },
-  breathCard: {
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 14,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  breathPhase: {
-    color: dark.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  breathCountdown: {
-    color: dark.accent,
-    fontSize: 28,
-    fontWeight: '800',
-    marginTop: 6,
-    marginBottom: 12,
-  },
-  breathStopButton: {
-    borderWidth: 1,
-    borderColor: dark.danger,
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-  },
-  breathStopButtonText: {
-    color: dark.danger,
-    fontWeight: '700',
-  },
-  breathStartButton: {
-    backgroundColor: dark.accent,
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  breathStartButtonText: {
-    color: '#0a0a0a',
-    fontWeight: '700',
-  },
   empty: {
-    color: dark.textFaint,
+    color: calm.textFaint,
     textAlign: 'center',
     marginTop: 12,
   },
@@ -698,9 +596,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 10,
+    borderColor: calm.border,
+    backgroundColor: calm.surface,
+    borderRadius: 14,
     padding: 12,
     marginBottom: 8,
     gap: 12,
@@ -714,11 +612,11 @@ const styles = StyleSheet.create({
   historyDate: {
     fontSize: 13,
     fontWeight: '700',
-    color: dark.text,
+    color: calm.text,
   },
   historyNotes: {
     fontSize: 12,
-    color: dark.textMuted,
+    color: calm.textMuted,
     marginTop: 2,
   },
 });

@@ -237,6 +237,33 @@ export function buildWellnessReflectionPrompt(mood: number, notes: string): stri
   );
 }
 
+export function buildWellnessRecommendationPrompt(params: {
+  wellnessScore: number | null;
+  mood: number | null;
+  stress: number | null;
+  energy: number | null;
+  recoveryScore: number | null;
+  sleepHours: number | null;
+}): string {
+  const parts: string[] = [];
+  if (params.wellnessScore != null) parts.push(`overall wellness score ${params.wellnessScore}/100`);
+  if (params.mood != null) parts.push(`mood ${params.mood}/5`);
+  if (params.stress != null) parts.push(`stress ${params.stress}/5`);
+  if (params.energy != null) parts.push(`energy ${params.energy}/5`);
+  if (params.recoveryScore != null) parts.push(`Oura recovery score ${params.recoveryScore}/100`);
+  if (params.sleepHours != null) parts.push(`${params.sleepHours.toFixed(1)}h sleep last night`);
+  const signals = parts.length > 0 ? parts.join(', ') : 'no check-in data yet today';
+
+  return (
+    `You are a warm, practical wellness companion inside a fitness app, not a therapist or doctor. ` +
+    `Today's real signals for this user: ${signals}. Write a short, personalized recommendation ` +
+    '(3-4 sentences) for how to approach today: whether to push physical training or prioritize ' +
+    'recovery, and one concrete wellness action (breathwork, hydration, a short walk, an early ' +
+    'night, etc). Base it only on the real signals given — if a signal is missing, do not guess ' +
+    'or invent it. No markdown, plain conversational sentences. This is not medical advice.'
+  );
+}
+
 export function buildSleepInsightPrompt(
   nights: { date: string; durationMinutes: number | null; bedtime: string | null; score: number | null }[]
 ): string {
