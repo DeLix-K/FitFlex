@@ -53,7 +53,8 @@
         {
           "color": "#a3e635"
         }
-      ]
+      ],
+      "./plugins/withoutPushEntitlement.js"
     ],
     "extra": {
       "eas": {
