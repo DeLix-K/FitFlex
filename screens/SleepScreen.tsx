@@ -9,9 +9,26 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import SleepBehaviorTags from '../components/SleepBehaviorTags';
+import SleepDebtCard from '../components/SleepDebtCard';
+import SleepGreetingCard from '../components/SleepGreetingCard';
+import SleepHypnogram from '../components/SleepHypnogram';
+import SleepReadinessCard from '../components/SleepReadinessCard';
+import SleepRecoveryHub from '../components/SleepRecoveryHub';
 import { saveHistoryEntry } from '../lib/aiHistory';
 import { askClaude, buildSleepInsightPrompt } from '../lib/claude';
-import { fetchSleepHistory, logSleepManually, syncOuraSleep, yesterdayLocalDate } from '../lib/sleep';
+import { getOuraData, type OuraData } from '../lib/oura';
+import {
+  computeSleepDebt,
+  computeWindDownTimes,
+  fetchSleepGoal,
+  fetchSleepHistory,
+  logSleepManually,
+  syncOuraSleep,
+  yesterdayLocalDate,
+  type SleepGoal,
+} from '../lib/sleep';
+import { getMyStats } from '../lib/streaks';
 import { dark } from '../lib/theme';
 import type { SleepLog } from '../lib/types';
 
@@ -49,8 +66,14 @@ function bedtimeConsistency(nights: SleepLog[]): string {
   return 'Irregular';
 }
 
+const DEFAULT_OURA: OuraData = { connected: false };
+const DEFAULT_GOAL: SleepGoal = { sleepGoalHours: 8, targetWakeTime: '07:00:00' };
+
 export default function SleepScreen() {
   const [history, setHistory] = useState<SleepLog[]>([]);
+  const [displayName, setDisplayName] = useState('Fitness Fan');
+  const [oura, setOura] = useState<OuraData>(DEFAULT_OURA);
+  const [sleepGoal, setSleepGoal] = useState<SleepGoal>(DEFAULT_GOAL);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [syncNote, setSyncNote] = useState<string | null>(null);
@@ -67,8 +90,14 @@ export default function SleepScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const data = await fetchSleepHistory();
-      setHistory(data);
+      const [sleepHistory, stats, goal] = await Promise.all([
+        fetchSleepHistory(),
+        getMyStats().catch(() => ({ displayName: 'Fitness Fan' })),
+        fetchSleepGoal().catch(() => DEFAULT_GOAL),
+      ]);
+      setHistory(sleepHistory);
+      setDisplayName(stats.displayName);
+      setSleepGoal(goal);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -79,10 +108,16 @@ export default function SleepScreen() {
       const result = await syncOuraSleep();
       if (result.error) setSyncNote(result.error);
       else if (result.connected && result.synced > 0) setSyncNote(null);
-      await load();
     } catch {
       // Oura sync is best-effort — manual logging still works without it.
     }
+    try {
+      const ouraData = await getOuraData();
+      setOura(ouraData);
+    } catch {
+      setOura(DEFAULT_OURA);
+    }
+    await load();
   }, [load]);
 
   useEffect(() => {
@@ -126,6 +161,13 @@ export default function SleepScreen() {
   const last7 = useMemo(() => history.slice(0, 7), [history]);
   const latest = last7[0];
 
+  const windDown = useMemo(
+    () => computeWindDownTimes(sleepGoal.targetWakeTime, sleepGoal.sleepGoalHours),
+    [sleepGoal]
+  );
+  const sleepDebt = useMemo(() => computeSleepDebt(history, sleepGoal.sleepGoalHours), [history, sleepGoal]);
+  const recoveryScore = oura.connected ? oura.recoveryScore : null;
+
   const handleGetInsight = async () => {
     setInsightLoading(true);
     setError(null);
@@ -165,20 +207,37 @@ export default function SleepScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
       ListHeaderComponent={
         <>
-          <Text style={styles.title}>Sleep</Text>
+          <Text style={styles.title}>Sleep & Recovery</Text>
           <Text style={styles.subtitle}>
             Log your sleep manually, or connect Oura on the Wearables tab to sync it automatically.
           </Text>
           {syncNote && <Text style={styles.note}>{syncNote}</Text>}
           {error && <Text style={styles.error}>{error}</Text>}
 
-          <View style={styles.heroCard}>
-            <Text style={styles.heroEmoji}>😴</Text>
-            <Text style={styles.heroScore}>
-              {latest?.sleep_score != null ? latest.sleep_score : formatDuration(latest?.duration_minutes ?? null)}
-            </Text>
-            <Text style={styles.heroLabel}>{scoreLabel(latest?.sleep_score ?? null)}</Text>
-          </View>
+          <SleepGreetingCard
+            displayName={displayName}
+            latest={latest ?? null}
+            recoveryScore={recoveryScore}
+            recommendedBedtimeLabel={windDown.recommendedBedtimeLabel}
+            caffeineCutoffLabel={windDown.caffeineCutoffLabel}
+          />
+
+          <SleepReadinessCard
+            ouraConnected={oura.connected}
+            recoveryScore={recoveryScore}
+            hrvBalance={oura.connected ? oura.hrvBalance : null}
+            restingHeartRateBalance={oura.connected ? oura.restingHeartRateBalance : null}
+            averageHrv={latest?.average_hrv ?? null}
+            lowestHeartRate={latest?.lowest_heart_rate ?? null}
+          />
+
+          <SleepHypnogram
+            sleepPhase5min={latest?.sleep_phase_5min ?? null}
+            bedtime={latest?.bedtime ?? null}
+            wakeTime={latest?.wake_time ?? null}
+            deepMinutes={latest?.deep_minutes ?? null}
+            remMinutes={latest?.rem_minutes ?? null}
+          />
 
           {latest && (
             <View style={styles.metricsGrid}>
@@ -229,6 +288,9 @@ export default function SleepScreen() {
               </View>
             </>
           )}
+
+          <SleepBehaviorTags sleepDate={yesterdayLocalDate()} />
+          <SleepDebtCard debt={sleepDebt} />
 
           <View style={styles.insightCard}>
             {insight ? (
@@ -308,6 +370,8 @@ export default function SleepScreen() {
             </Pressable>
           )}
 
+          <SleepRecoveryHub />
+
           <Text style={styles.sectionTitle}>Recent Nights</Text>
         </>
       }
@@ -370,30 +434,6 @@ const styles = StyleSheet.create({
   error: {
     color: dark.danger,
     marginBottom: 12,
-  },
-  heroCard: {
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 20,
-    paddingVertical: 24,
-    marginBottom: 12,
-  },
-  heroEmoji: {
-    fontSize: 32,
-    marginBottom: 4,
-  },
-  heroScore: {
-    color: dark.text,
-    fontSize: 36,
-    fontWeight: '800',
-  },
-  heroLabel: {
-    color: dark.accent,
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 4,
   },
   metricsGrid: {
     flexDirection: 'row',

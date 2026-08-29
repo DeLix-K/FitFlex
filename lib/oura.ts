@@ -10,6 +10,7 @@ export type OuraData =
       activeMinutes: number;
       recoveryScore: number | null;
       hrvBalance: number | null;
+      restingHeartRateBalance: number | null;
       error?: string;
     };
 

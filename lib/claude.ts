@@ -262,6 +262,14 @@ export function buildSleepInsightPrompt(
   );
 }
 
+export function buildBedtimeStoryPrompt(theme: string): string {
+  return (
+    `Write a short, calming bedtime story for an adult winding down for sleep. Theme: ${theme || 'a peaceful, gentle scene'}. ` +
+    'Keep it 150-220 words, slow-paced, soothing, present tense, second person or gentle narration -- no ' +
+    'suspense, conflict, or plot tension of any kind. Plain prose only, no markdown, no headers, no title line.'
+  );
+}
+
 export function buildExerciseExplanationPrompt(exercise: {
   name: string;
   category: string;

@@ -68,7 +68,8 @@ export type AiHistoryKind =
   | 'daily_briefing'
   | 'post_workout_insight'
   | 'session_recalibration'
-  | 'form_check';
+  | 'form_check'
+  | 'bedtime_story';
 
 export type AiHistoryEntry = {
   id: string;
@@ -416,4 +417,26 @@ export type SleepLog = {
   rem_minutes: number | null;
   light_minutes: number | null;
   awake_minutes: number | null;
+  average_hrv: number | null;
+  lowest_heart_rate: number | null;
+  sleep_phase_5min: string | null;
+};
+
+export type SleepBehaviorTag =
+  | 'alcohol'
+  | 'late_meal'
+  | 'caffeine_late'
+  | 'sauna_bath'
+  | 'screen_time'
+  | 'stressful_day'
+  | 'meditated'
+  | 'magnesium'
+  | 'intense_exercise';
+
+export type SleepBehaviorTagRow = {
+  id: string;
+  user_id: string;
+  sleep_date: string;
+  tag: SleepBehaviorTag;
+  created_at: string;
 };

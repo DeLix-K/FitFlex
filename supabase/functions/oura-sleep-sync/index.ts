@@ -168,6 +168,9 @@ Deno.serve(async (req) => {
         rem_sleep_duration?: number;
         light_sleep_duration?: number;
         awake_time?: number;
+        average_hrv?: number;
+        lowest_heart_rate?: number;
+        sleep_phase_5_min?: string;
       }) => ({
         user_id: user.id,
         sleep_date: record.day,
@@ -181,6 +184,9 @@ Deno.serve(async (req) => {
         rem_minutes: record.rem_sleep_duration != null ? Math.round(record.rem_sleep_duration / 60) : null,
         light_minutes: record.light_sleep_duration != null ? Math.round(record.light_sleep_duration / 60) : null,
         awake_minutes: record.awake_time != null ? Math.round(record.awake_time / 60) : null,
+        average_hrv: record.average_hrv ?? null,
+        lowest_heart_rate: record.lowest_heart_rate ?? null,
+        sleep_phase_5min: record.sleep_phase_5_min ?? null,
         source: 'oura',
       }));
 

@@ -46,7 +46,14 @@
           "speechRecognitionPermission": "FitFlex uses speech recognition to turn your voice into text for your AI Coach."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "color": "#a3e635"
+        }
+      ]
     ],
     "extra": {
       "eas": {

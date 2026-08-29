@@ -173,6 +173,7 @@ Deno.serve(async (req) => {
           activeMinutes: 0,
           recoveryScore: readinessRecord?.score ?? null,
           hrvBalance: readinessRecord?.contributors?.hrv_balance ?? null,
+          restingHeartRateBalance: readinessRecord?.contributors?.resting_heart_rate ?? null,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -192,6 +193,7 @@ Deno.serve(async (req) => {
         activeMinutes: Math.round(activeSeconds / 60),
         recoveryScore: readinessRecord?.score ?? null,
         hrvBalance: readinessRecord?.contributors?.hrv_balance ?? null,
+        restingHeartRateBalance: readinessRecord?.contributors?.resting_heart_rate ?? null,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
