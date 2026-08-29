@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { createChallenge } from '../lib/challenges';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { createChallenge, fetchMyTrainerProfileId, type CreateChallengeStageInput } from '../lib/challenges';
 import { dark } from '../lib/theme';
 
 // Simple locale heuristic: US-locale devices default to pounds, everywhere
@@ -36,6 +36,7 @@ type Template = {
   days: number;
   targetWorkouts: number;
   targetNote: string;
+  stages?: CreateChallengeStageInput[];
 };
 
 function buildTemplates(): Template[] {
@@ -79,6 +80,33 @@ function buildTemplates(): Template[] {
       targetNote: '',
     },
     {
+      key: 'mobility_quest',
+      label: '🗺️ Mobility Quest',
+      title: '30-Day Mobility Reset',
+      description: 'A 3-stage quest: build the daily habit, deepen your range of motion, then lock it in.',
+      days: 30,
+      targetWorkouts: 24,
+      targetNote: '',
+      stages: [
+        { title: 'Stage 1: Foundations', description: 'Short daily mobility sessions to build the habit.', durationDays: 10, targetWorkouts: 7 },
+        { title: 'Stage 2: Depth', description: 'Longer sessions, deeper stretches and holds.', durationDays: 10, targetWorkouts: 8 },
+        { title: 'Stage 3: Lock It In', description: 'Keep the habit steady through the final stretch.', durationDays: 10, targetWorkouts: 9 },
+      ],
+    },
+    {
+      key: 'morning_quest',
+      label: '🌅 Morning Quest',
+      title: 'Snooze-to-Sweat Morning Routine',
+      description: 'A 2-stage quest to build a real morning workout habit.',
+      days: 21,
+      targetWorkouts: 15,
+      targetNote: 'Goal: train before 9am',
+      stages: [
+        { title: 'Stage 1: Wake Up Call', description: 'Get moving in the morning, any duration counts.', durationDays: 10, targetWorkouts: 6 },
+        { title: 'Stage 2: The Routine', description: 'Make it a real session, same time most days.', durationDays: 11, targetWorkouts: 9 },
+      ],
+    },
+    {
       key: 'custom',
       label: 'Custom',
       title: '',
@@ -106,8 +134,17 @@ export default function CreateChallengeModal({
   const [targetNote, setTargetNote] = useState(templates[0].targetNote);
   const [days, setDays] = useState(String(templates[0].days));
   const [targetWorkouts, setTargetWorkouts] = useState(String(templates[0].targetWorkouts));
+  const [stages, setStages] = useState<CreateChallengeStageInput[] | undefined>(undefined);
+  const [premiumOnly, setPremiumOnly] = useState(false);
+  const [trainerProfileId, setTrainerProfileId] = useState<string | null>(null);
+  const [hostAsTrainer, setHostAsTrainer] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    fetchMyTrainerProfileId().then(setTrainerProfileId).catch(() => setTrainerProfileId(null));
+  }, [visible]);
 
   const applyTemplate = (t: Template) => {
     setTemplateKey(t.key);
@@ -116,6 +153,7 @@ export default function CreateChallengeModal({
     setTargetNote(t.targetNote);
     setDays(String(t.days));
     setTargetWorkouts(String(t.targetWorkouts));
+    setStages(t.stages);
   };
 
   const handleCreate = async () => {
@@ -147,6 +185,9 @@ export default function CreateChallengeModal({
         endDate,
         targetWorkouts: numTarget,
         targetNote: targetNote.trim(),
+        premiumOnly,
+        hostedByTrainerId: hostAsTrainer ? trainerProfileId : null,
+        stages,
       });
       onCreated();
     } catch (err) {
@@ -235,8 +276,59 @@ export default function CreateChallengeModal({
             </View>
             <Text style={styles.hint}>
               Progress is tracked the same way as every other challenge: log a workout in the Streaks
-              tab on a day you complete this challenge's goal.
+              tab on a day you complete this challenge's goal. Everyone who joins also gets a
+              personalized target automatically scaled from their own recent activity, so beginners
+              and veterans compete fairly on % completed.
             </Text>
+
+            {stages && stages.length > 0 && (
+              <View style={styles.stagesBox}>
+                <Text style={styles.stagesTitle}>🗺️ Quest Stages</Text>
+                {stages.map((s, i) => (
+                  <View key={i} style={styles.stageRow}>
+                    <Text style={styles.stageIndex}>{i + 1}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.stageTitle}>{s.title}</Text>
+                      <Text style={styles.stageMeta}>
+                        {s.durationDays} days · target {s.targetWorkouts} days
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                <Text style={styles.stagesHint}>
+                  Participants see this as a story arc with a progress path — each stage unlocks after
+                  the previous one's days elapse.
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchLabel}>Subscriber-only challenge</Text>
+                <Text style={styles.switchSub}>Only Premium members can join.</Text>
+              </View>
+              <Switch
+                value={premiumOnly}
+                onValueChange={setPremiumOnly}
+                trackColor={{ false: dark.border, true: dark.accentDark }}
+                thumbColor={premiumOnly ? dark.accent : '#888'}
+              />
+            </View>
+
+            {trainerProfileId && (
+              <View style={styles.switchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Host as trainer</Text>
+                  <Text style={styles.switchSub}>Shows "Hosted by" your trainer listing.</Text>
+                </View>
+                <Switch
+                  value={hostAsTrainer}
+                  onValueChange={setHostAsTrainer}
+                  trackColor={{ false: dark.border, true: dark.accentDark }}
+                  thumbColor={hostAsTrainer ? dark.accent : '#888'}
+                />
+              </View>
+            )}
 
             {error && <Text style={styles.error}>{error}</Text>}
 
@@ -340,6 +432,64 @@ const styles = StyleSheet.create({
     color: dark.textFaint,
     marginTop: 10,
     lineHeight: 15,
+  },
+  stagesBox: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: dark.accentDark,
+    backgroundColor: dark.surface,
+    borderRadius: 12,
+    padding: 14,
+  },
+  stagesTitle: {
+    color: dark.text,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  stageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  stageIndex: {
+    color: dark.accent,
+    fontWeight: '800',
+    fontSize: 13,
+    width: 16,
+  },
+  stageTitle: {
+    color: dark.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  stageMeta: {
+    color: dark.textFaint,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  stagesHint: {
+    color: dark.textFaint,
+    fontSize: 10,
+    marginTop: 4,
+    lineHeight: 14,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 10,
+  },
+  switchLabel: {
+    color: dark.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  switchSub: {
+    color: dark.textFaint,
+    fontSize: 11,
+    marginTop: 2,
   },
   error: {
     color: dark.danger,

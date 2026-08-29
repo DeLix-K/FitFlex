@@ -6,21 +6,33 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import ChallengeActivityFeed from '../components/ChallengeActivityFeed';
+import ChallengeSquadPanel from '../components/ChallengeSquadPanel';
+import ChallengeStageTimeline from '../components/ChallengeStageTimeline';
 import CreateChallengeModal from '../components/CreateChallengeModal';
 import InviteFriendsModal from '../components/InviteFriendsModal';
 import {
+  consistencyPct,
   fetchChallengeLeaderboard,
   fetchChallenges,
   fetchChallengeStats,
   fetchMyChallengeInvites,
   fetchMyProgress,
   getChallengeStatus,
+  improvementPct,
   joinChallenge,
   leaveChallenge,
+  postChallengeActivity,
   respondToChallengeInvite,
+  updateCommitment,
+  useChallengeShield,
 } from '../lib/challenges';
+import { fetchStreakFreezeBalance } from '../lib/streaks';
+import { getIsPremium } from '../lib/subscription';
+import { startCheckout } from '../lib/billing';
 import { supabase } from '../lib/supabase';
 import { dark } from '../lib/theme';
 import type { Challenge, ChallengeInviteView, ChallengeProgress } from '../lib/types';
@@ -39,18 +51,31 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'completed', label: 'Completed' },
 ];
 
+type LeaderboardSort = 'total' | 'consistency' | 'improvement';
+const SORT_TABS: { key: LeaderboardSort; label: string }[] = [
+  { key: 'total', label: 'Total' },
+  { key: 'consistency', label: 'Consistency %' },
+  { key: 'improvement', label: 'Improvement %' },
+];
+
 export default function ChallengesScreen() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
+  const [freezeBalance, setFreezeBalance] = useState(0);
   const [tab, setTab] = useState<Tab>('active');
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [myProgress, setMyProgress] = useState<Record<string, ChallengeProgress>>({});
+  const [trainerNames, setTrainerNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [shieldBusyId, setShieldBusyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedBoard, setExpandedBoard] = useState<ChallengeProgress[]>([]);
   const [expandedLoading, setExpandedLoading] = useState(false);
+  const [leaderboardSort, setLeaderboardSort] = useState<LeaderboardSort>('total');
+  const [commitmentDrafts, setCommitmentDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [invites, setInvites] = useState<ChallengeInviteView[]>([]);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
@@ -59,15 +84,18 @@ export default function ChallengesScreen() {
 
   const load = useCallback(async () => {
     setError(null);
+    const previousProgress = myProgress;
     try {
       const { data } = await supabase.auth.getUser();
       setUserId(data.user?.id ?? null);
 
-      const [list, statCounts, progress, myInvites] = await Promise.all([
+      const [list, statCounts, progress, myInvites, premium, freezes] = await Promise.all([
         fetchChallenges(),
         fetchChallengeStats(),
         fetchMyProgress(),
         fetchMyChallengeInvites(),
+        getIsPremium(),
+        fetchStreakFreezeBalance(),
       ]);
       setChallenges(list);
       setStats(statCounts);
@@ -75,9 +103,30 @@ export default function ChallengesScreen() {
       for (const row of progress) progressMap[row.challenge_id] = row;
       setMyProgress(progressMap);
       setInvites(myInvites);
+      setIsPremium(premium);
+      setFreezeBalance(freezes?.balance ?? 0);
+
+      // Post a real 'completed' activity the moment a challenge transitions
+      // from incomplete to complete -- checked once per load, so it never
+      // double-posts on a later reload of an already-completed challenge.
+      for (const row of progress) {
+        const prev = previousProgress[row.challenge_id];
+        const wasComplete = prev && prev.workouts_logged + prev.shields_used >= prev.effective_target;
+        const nowComplete = row.workouts_logged + row.shields_used >= row.effective_target;
+        if (nowComplete && !wasComplete) {
+          postChallengeActivity(row.challenge_id, 'completed').catch(() => {});
+        }
+      }
+
+      const hostedIds = Array.from(new Set(list.map((c) => c.hosted_by_trainer_id).filter(Boolean))) as string[];
+      if (hostedIds.length > 0) {
+        const { data: trainers } = await supabase.from('trainer_profiles').select('id, display_name').in('id', hostedIds);
+        setTrainerNames(Object.fromEntries((trainers ?? []).map((t) => [t.id, t.display_name])));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -91,11 +140,19 @@ export default function ChallengesScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const handleJoin = async (challengeId: string) => {
-    setBusyId(challengeId);
+  const handleJoin = async (challenge: Challenge) => {
+    if (challenge.premium_only && !isPremium) {
+      try {
+        await startCheckout();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+    setBusyId(challenge.id);
     setError(null);
     try {
-      await joinChallenge(challengeId);
+      await joinChallenge(challenge.id);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -118,6 +175,31 @@ export default function ChallengesScreen() {
     }
   };
 
+  const handleUseShield = async (challengeId: string) => {
+    setShieldBusyId(challengeId);
+    setError(null);
+    try {
+      const success = await useChallengeShield(challengeId);
+      if (!success) setError("Couldn't use a shield — check your balance or the challenge's shield cap.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setShieldBusyId(null);
+    }
+  };
+
+  const handleSaveCommitment = async (challengeId: string) => {
+    const text = commitmentDrafts[challengeId];
+    if (text == null) return;
+    try {
+      await updateCommitment(challengeId, text);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const handleInviteResponse = async (invite: ChallengeInviteView, accept: boolean) => {
     setInviteBusyId(invite.id);
     setError(null);
@@ -137,6 +219,7 @@ export default function ChallengesScreen() {
       return;
     }
     setExpandedId(challengeId);
+    setLeaderboardSort('total');
     setExpandedLoading(true);
     try {
       const board = await fetchChallengeLeaderboard(challengeId);
@@ -161,10 +244,24 @@ export default function ChallengesScreen() {
       case 'completed':
         return challenges.filter((c) => {
           const progress = myProgress[c.id];
-          return progress && progress.workouts_logged >= c.target_workouts;
+          return progress && progress.workouts_logged + progress.shields_used >= progress.effective_target;
         });
     }
   }, [tab, challenges, stats, myProgress]);
+
+  const sortedBoard = useMemo(() => {
+    const challenge = challenges.find((c) => c.id === expandedId);
+    if (!challenge) return expandedBoard;
+    const copy = [...expandedBoard];
+    if (leaderboardSort === 'consistency') {
+      copy.sort((a, b) => consistencyPct(b, challenge) - consistencyPct(a, challenge));
+    } else if (leaderboardSort === 'improvement') {
+      copy.sort((a, b) => (improvementPct(b, challenge) ?? -999) - (improvementPct(a, challenge) ?? -999));
+    } else {
+      copy.sort((a, b) => b.workouts_logged - a.workouts_logged);
+    }
+    return copy;
+  }, [expandedBoard, leaderboardSort, expandedId, challenges]);
 
   if (loading) {
     return (
@@ -252,10 +349,15 @@ export default function ChallengesScreen() {
         const status = getChallengeStatus(challenge);
         const progress = myProgress[challenge.id];
         const joined = !!progress;
+        const locked = challenge.premium_only && !isPremium;
         const workoutsLogged = progress?.workouts_logged ?? 0;
-        const complete = joined && workoutsLogged >= challenge.target_workouts;
-        const pct = Math.min(1, workoutsLogged / challenge.target_workouts);
+        const shieldsUsed = progress?.shields_used ?? 0;
+        const effectiveTarget = progress?.effective_target ?? challenge.target_workouts;
+        const complete = joined && workoutsLogged + shieldsUsed >= effectiveTarget;
+        const pct = Math.min(1, (workoutsLogged + shieldsUsed) / effectiveTarget);
         const expanded = expandedId === challenge.id;
+        const hostName = challenge.hosted_by_trainer_id ? trainerNames[challenge.hosted_by_trainer_id] : null;
+        const shieldCap = Math.max(1, Math.round(effectiveTarget * 0.3));
 
         return (
           <View style={styles.card}>
@@ -268,6 +370,20 @@ export default function ChallengesScreen() {
                   </Text>
                 </View>
               </View>
+
+              <View style={styles.tagsRow}>
+                {challenge.premium_only && (
+                  <View style={styles.premiumTag}>
+                    <Text style={styles.premiumTagText}>✨ Subscriber-Only</Text>
+                  </View>
+                )}
+                {hostName && (
+                  <View style={styles.hostTag}>
+                    <Text style={styles.hostTagText}>Hosted by {hostName}</Text>
+                  </View>
+                )}
+              </View>
+
               <Text style={styles.cardDescription}>{challenge.description}</Text>
               {challenge.target_note ? (
                 <Text style={styles.cardGoalNote}>{challenge.target_note}</Text>
@@ -283,17 +399,50 @@ export default function ChallengesScreen() {
                   </View>
                   <Text style={styles.progressText}>
                     {complete
-                      ? `✓ Completed — ${workoutsLogged}/${challenge.target_workouts} Days`
-                      : `Progress: ${workoutsLogged}/${challenge.target_workouts} Days`}
+                      ? `✓ Completed — ${workoutsLogged + shieldsUsed}/${effectiveTarget} Days`
+                      : `Progress: ${workoutsLogged + shieldsUsed}/${effectiveTarget} Days (${Math.round(pct * 100)}%)`}
+                    {progress && progress.effective_target !== challenge.target_workouts
+                      ? ' · personalized target'
+                      : ''}
                   </Text>
                 </View>
               )}
             </Pressable>
 
+            {joined && !complete && isPremium && (
+              <Pressable
+                style={styles.shieldButton}
+                onPress={() => handleUseShield(challenge.id)}
+                disabled={shieldBusyId === challenge.id || freezeBalance < 1 || shieldsUsed >= shieldCap}
+              >
+                {shieldBusyId === challenge.id ? (
+                  <ActivityIndicator size="small" color={dark.accent} />
+                ) : (
+                  <Text style={styles.shieldButtonText}>
+                    🛡️ Use a Shield ({freezeBalance} available, {shieldsUsed}/{shieldCap} used here)
+                  </Text>
+                )}
+              </Pressable>
+            )}
+
+            {joined && (
+              <View style={styles.commitmentRow}>
+                <TextInput
+                  style={styles.commitmentInput}
+                  placeholder="Your commitment (optional, shown to your squad)"
+                  placeholderTextColor={dark.textFaint}
+                  value={commitmentDrafts[challenge.id] ?? progress?.commitment ?? ''}
+                  onChangeText={(text) => setCommitmentDrafts((d) => ({ ...d, [challenge.id]: text }))}
+                  onBlur={() => handleSaveCommitment(challenge.id)}
+                  maxLength={120}
+                />
+              </View>
+            )}
+
             <View style={styles.cardFooter}>
               <View style={styles.cardFooterLinks}>
                 <Pressable onPress={() => toggleExpanded(challenge.id)}>
-                  <Text style={styles.linkText}>{expanded ? 'Hide leaderboard' : 'View leaderboard'}</Text>
+                  <Text style={styles.linkText}>{expanded ? 'Hide details' : 'View details'}</Text>
                 </Pressable>
                 {joined && (
                   <Pressable onPress={() => setInviteTarget(challenge)}>
@@ -317,39 +466,68 @@ export default function ChallengesScreen() {
               ) : (
                 <Pressable
                   style={styles.actionButton}
-                  onPress={() => handleJoin(challenge.id)}
+                  onPress={() => handleJoin(challenge)}
                   disabled={busyId === challenge.id}
                 >
                   {busyId === challenge.id ? (
                     <ActivityIndicator size="small" color="#0a0a0a" />
                   ) : (
-                    <Text style={styles.joinButtonText}>Join Challenge</Text>
+                    <Text style={styles.joinButtonText}>{locked ? 'Unlock with Premium' : 'Join Challenge'}</Text>
                   )}
                 </Pressable>
               )}
             </View>
 
             {expanded && (
-              <View style={styles.leaderboard}>
+              <View style={styles.expandedSection}>
+                <View style={styles.sortRow}>
+                  {SORT_TABS.map((s) => (
+                    <Pressable
+                      key={s.key}
+                      style={[styles.sortChip, leaderboardSort === s.key && styles.sortChipActive]}
+                      onPress={() => setLeaderboardSort(s.key)}
+                    >
+                      <Text style={[styles.sortChipText, leaderboardSort === s.key && styles.sortChipTextActive]}>
+                        {s.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
                 {expandedLoading ? (
                   <ActivityIndicator style={styles.leaderboardLoading} color={dark.accent} />
-                ) : expandedBoard.length === 0 ? (
+                ) : sortedBoard.length === 0 ? (
                   <Text style={styles.empty}>No one has joined yet.</Text>
                 ) : (
-                  expandedBoard.map((row, index) => (
-                    <View
-                      key={row.user_id}
-                      style={[styles.row, row.user_id === userId && styles.rowMe]}
-                    >
-                      <Text style={styles.rank}>{index + 1}</Text>
-                      <Text style={styles.rowName}>
-                        {row.display_name}
-                        {row.user_id === userId ? ' (you)' : ''}
-                      </Text>
-                      <Text style={styles.rowStat}>{row.workouts_logged} workouts</Text>
-                    </View>
-                  ))
+                  sortedBoard.map((row, index) => {
+                    const improvement = improvementPct(row, challenge);
+                    const value =
+                      leaderboardSort === 'consistency'
+                        ? `${consistencyPct(row, challenge)}%`
+                        : leaderboardSort === 'improvement'
+                          ? improvement == null
+                            ? '—'
+                            : `${improvement > 0 ? '+' : ''}${improvement}%`
+                          : `${row.workouts_logged} workouts`;
+                    return (
+                      <View key={row.user_id} style={[styles.row, row.user_id === userId && styles.rowMe]}>
+                        <Text style={styles.rank}>{index + 1}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.rowName}>
+                            {row.display_name}
+                            {row.user_id === userId ? ' (you)' : ''}
+                          </Text>
+                          {row.commitment ? <Text style={styles.rowCommitment}>"{row.commitment}"</Text> : null}
+                        </View>
+                        <Text style={styles.rowStat}>{value}</Text>
+                      </View>
+                    );
+                  })
                 )}
+
+                <ChallengeStageTimeline challengeId={challenge.id} />
+                {joined && <ChallengeSquadPanel challengeId={challenge.id} />}
+                {joined && <ChallengeActivityFeed challengeId={challenge.id} />}
               </View>
             )}
           </View>
@@ -551,6 +729,36 @@ const styles = StyleSheet.create({
   badgeTextActive: {
     color: '#0a0a0a',
   },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  premiumTag: {
+    borderWidth: 1,
+    borderColor: dark.accent,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  premiumTagText: {
+    color: dark.accent,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  hostTag: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  hostTagText: {
+    color: dark.textMuted,
+    fontSize: 10,
+    fontWeight: '600',
+  },
   cardDescription: {
     fontSize: 13,
     color: dark.textMuted,
@@ -585,6 +793,32 @@ const styles = StyleSheet.create({
     color: dark.textMuted,
     marginTop: 4,
     fontWeight: '600',
+  },
+  shieldButton: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  shieldButtonText: {
+    color: dark.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  commitmentRow: {
+    marginTop: 12,
+  },
+  commitmentInput: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.text,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 12,
   },
   cardFooter: {
     flexDirection: 'row',
@@ -624,11 +858,35 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  leaderboard: {
+  expandedSection: {
     marginTop: 14,
     borderTopWidth: 1,
     borderTopColor: dark.border,
     paddingTop: 12,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  sortChip: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  sortChipActive: {
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
+  },
+  sortChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: dark.textMuted,
+  },
+  sortChipTextActive: {
+    color: '#0a0a0a',
   },
   leaderboardLoading: {
     marginVertical: 8,
@@ -653,10 +911,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   rowName: {
-    flex: 1,
     fontSize: 13,
     fontWeight: '600',
     color: dark.text,
+  },
+  rowCommitment: {
+    fontSize: 10,
+    color: dark.textFaint,
+    fontStyle: 'italic',
+    marginTop: 1,
   },
   rowStat: {
     fontSize: 12,

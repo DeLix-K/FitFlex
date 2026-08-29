@@ -112,6 +112,8 @@ export type Challenge = {
   target_workouts: number;
   creator_user_id: string | null;
   target_note: string;
+  premium_only: boolean;
+  hosted_by_trainer_id: string | null;
   created_at: string;
 };
 
@@ -121,6 +123,82 @@ export type ChallengeProgress = {
   display_name: string;
   joined_at: string;
   workouts_logged: number;
+  effective_target: number;
+  shields_used: number;
+  commitment: string;
+  baseline_workouts_per_week: number;
+};
+
+export type ChallengeStage = {
+  id: string;
+  challenge_id: string;
+  order_index: number;
+  title: string;
+  description: string;
+  duration_days: number;
+  target_workouts: number;
+};
+
+export type ChallengeStageProgress = {
+  stage_id: string;
+  challenge_id: string;
+  order_index: number;
+  title: string;
+  target_workouts: number;
+  stage_start: string;
+  stage_end: string;
+  user_id: string;
+  workouts_logged: number;
+};
+
+export type ChallengeTeam = {
+  id: string;
+  challenge_id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type ChallengeTeamMember = {
+  team_id: string;
+  challenge_id: string;
+  user_id: string;
+  joined_at: string;
+};
+
+export type ChallengeTeamProgress = {
+  team_id: string;
+  challenge_id: string;
+  name: string;
+  member_count: number;
+  total_workouts_logged: number;
+  total_shields_used: number;
+  total_target: number;
+};
+
+export type ChallengeActivityKind = 'joined' | 'logged_day' | 'completed';
+
+export type ChallengeActivity = {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  kind: ChallengeActivityKind;
+  created_at: string;
+};
+
+export type ChallengeActivityView = ChallengeActivity & {
+  display_name: string;
+  reactions: { high_five: number; boost: number; myReactions: string[] };
+};
+
+export type ChallengeReactionType = 'high_five' | 'boost';
+
+export type ChallengeReaction = {
+  id: string;
+  activity_id: string;
+  from_user_id: string;
+  reaction_type: ChallengeReactionType;
+  created_at: string;
 };
 
 export type ChallengeInviteStatus = 'pending' | 'accepted' | 'declined';

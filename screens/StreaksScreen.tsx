@@ -32,6 +32,7 @@ import {
   useStreakFreeze,
 } from '../lib/streaks';
 import { fetchBodyStats } from '../lib/profile';
+import { recordActivityForActiveChallenges } from '../lib/challenges';
 import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
 import type { LeaderboardEntry } from '../lib/types';
@@ -190,6 +191,7 @@ export default function StreaksScreen() {
     try {
       await logWorkoutToday(durationMinutes);
       setDurationPickerOpen(false);
+      await recordActivityForActiveChallenges().catch(() => {});
       const newLongest = await load();
       if (newLongest != null) {
         const crossed = MILESTONES.find((m) => m > previousLongest && m <= newLongest);
