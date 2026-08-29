@@ -1,14 +1,33 @@
 export type ExerciseCategory = 'home' | 'outdoor' | 'gym';
 
+export type ExerciseFatigueTier = 'low' | 'moderate' | 'high';
+
 export type Exercise = {
   id: string;
   name: string;
   instructions: string;
   benefits: string;
+  // Ordered primary-first: muscle_groups[0] is the primary muscle, the
+  // rest are secondary/stabilizers. No separate column for this -- see
+  // supabase/exercises_overhaul.sql.
   muscle_groups: string[];
   equipment: string[];
   category: ExerciseCategory;
   video_url: string | null;
+  created_at: string;
+  fatigue_tier: ExerciseFatigueTier | null;
+  low_impact: boolean;
+  created_by: string | null;
+};
+
+export type ExerciseSetLog = {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  logged_date: string;
+  weight: number;
+  weight_unit: 'kg' | 'lb';
+  reps: number;
   created_at: string;
 };
 

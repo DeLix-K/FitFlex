@@ -1,25 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import AiUsageIndicator from '../components/AiUsageIndicator';
+import CreateCustomExerciseModal from '../components/CreateCustomExerciseModal';
+import ExerciseCard from '../components/ExerciseCard';
+import MuscleBodyMap from '../components/MuscleBodyMap';
+import QuickAddToPlanModal from '../components/QuickAddToPlanModal';
+import ExerciseDetailScreen from './ExerciseDetailScreen';
 import { useAiGate } from '../hooks/useAiGate';
-import { saveHistoryEntry } from '../lib/aiHistory';
-import { askClaude, buildExerciseExplanationPrompt } from '../lib/claude';
 import { supabase } from '../lib/supabase';
+import {
+  deleteCustomExercise,
+  fetchExercises,
+  fetchSavedExerciseIds,
+  setExerciseSaved,
+} from '../lib/exercises';
 import { dark } from '../lib/theme';
 import type { Exercise, ExerciseCategory } from '../lib/types';
 
-type AiState = { loading: boolean; text?: string; error?: string };
+type Tab = 'all' | 'saved' | 'custom';
 
-const FILTERS: { label: string; value: ExerciseCategory | 'all' }[] = [
+const CATEGORY_FILTERS: { label: string; value: ExerciseCategory | 'all' }[] = [
   { label: 'All', value: 'all' },
   { label: 'Home', value: 'home' },
   { label: 'Outdoor', value: 'outdoor' },
@@ -29,106 +29,76 @@ const FILTERS: { label: string; value: ExerciseCategory | 'all' }[] = [
 export default function ExerciseListScreen() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState<ExerciseCategory | 'all'>('all');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('all');
+  const [categoryFilter, setCategoryFilter] = useState<ExerciseCategory | 'all'>('all');
+  const [equipmentFilter, setEquipmentFilter] = useState<string | null>(null);
   const [muscleFilter, setMuscleFilter] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [aiExplanations, setAiExplanations] = useState<Record<string, AiState>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
+  const [quickAddExercise, setQuickAddExercise] = useState<Exercise | null>(null);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
   const aiGate = useAiGate();
 
-  const fetchExercises = useCallback(async () => {
+  const load = useCallback(async () => {
     setError(null);
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-
-    const [exResult, savedResult] = await Promise.all([
-      supabase.from('exercises').select('*').order('name', { ascending: true }),
-      userId
-        ? supabase.from('saved_exercises').select('exercise_id').eq('user_id', userId)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-    if (exResult.error) {
-      setError(exResult.error.message);
-    } else {
-      setExercises(exResult.data ?? []);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      setUserId(userData.user?.id ?? null);
+      const [ex, saved] = await Promise.all([fetchExercises(), fetchSavedExerciseIds()]);
+      setExercises(ex);
+      setSavedIds(saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
-    setSavedIds(new Set((savedResult.data ?? []).map((r: { exercise_id: string }) => r.exercise_id)));
   }, []);
 
   useEffect(() => {
     setLoading(true);
-    fetchExercises().finally(() => setLoading(false));
-  }, [fetchExercises]);
+    load().finally(() => setLoading(false));
+  }, [load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchExercises();
+    await load();
     setRefreshing(false);
-  }, [fetchExercises]);
+  }, [load]);
 
-  // Derived from the real muscle_groups data rather than a hardcoded list,
-  // so filters never reference a group that isn't actually in the catalog.
   const muscleGroups = useMemo(() => {
     const set = new Set<string>();
     for (const e of exercises) for (const mg of e.muscle_groups) set.add(mg);
     return [...set].sort();
   }, [exercises]);
 
+  const equipmentOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of exercises) for (const eq of e.equipment) set.add(eq);
+    return [...set].sort();
+  }, [exercises]);
+
   const filtered = exercises
-    .filter((e) => filter === 'all' || e.category === filter)
+    .filter((e) => tab !== 'saved' || savedIds.has(e.id))
+    .filter((e) => tab !== 'custom' || e.created_by === userId)
+    .filter((e) => categoryFilter === 'all' || e.category === categoryFilter)
     .filter((e) => !muscleFilter || e.muscle_groups.includes(muscleFilter))
+    .filter((e) => !equipmentFilter || e.equipment.includes(equipmentFilter))
     .filter((e) => e.name.toLowerCase().includes(search.trim().toLowerCase()));
 
-  const askAi = async (item: Exercise) => {
-    if (!aiGate.canUse) {
-      setAiExplanations((current) => ({
-        ...current,
-        [item.id]: {
-          loading: false,
-          error: "You've used today's free AI actions. Upgrade to Premium for unlimited access.",
-        },
-      }));
-      return;
-    }
-
-    setAiExplanations((current) => ({ ...current, [item.id]: { loading: true } }));
-    try {
-      const reply = await askClaude(buildExerciseExplanationPrompt(item));
-      setAiExplanations((current) => ({ ...current, [item.id]: { loading: false, text: reply } }));
-      saveHistoryEntry('exercise_explanation', reply, item.name);
-      aiGate.refresh();
-    } catch (err) {
-      setAiExplanations((current) => ({
-        ...current,
-        [item.id]: { loading: false, error: err instanceof Error ? err.message : String(err) },
-      }));
-    }
-  };
-
   const toggleSave = async (item: Exercise) => {
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-    if (!userId) return;
-
     setSavingId(item.id);
     const isSaved = savedIds.has(item.id);
     try {
-      if (isSaved) {
-        await supabase.from('saved_exercises').delete().eq('user_id', userId).eq('exercise_id', item.id);
-        setSavedIds((s) => {
-          const next = new Set(s);
-          next.delete(item.id);
-          return next;
-        });
-      } else {
-        await supabase.from('saved_exercises').insert({ user_id: userId, exercise_id: item.id });
-        setSavedIds((s) => new Set(s).add(item.id));
-      }
+      await setExerciseSaved(item.id, !isSaved);
+      setSavedIds((s) => {
+        const next = new Set(s);
+        if (isSaved) next.delete(item.id);
+        else next.add(item.id);
+        return next;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -136,15 +106,35 @@ export default function ExerciseListScreen() {
     }
   };
 
+  const handleDeleteCustom = async (id: string) => {
+    try {
+      await deleteCustomExercise(id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const selectedExercise = exercises.find((e) => e.id === selectedExerciseId) ?? null;
+  if (selectedExercise) {
+    return (
+      <ExerciseDetailScreen
+        exercise={selectedExercise}
+        allExercises={exercises}
+        saved={savedIds.has(selectedExercise.id)}
+        onToggleSave={() => toggleSave(selectedExercise)}
+        onBack={() => setSelectedExerciseId(null)}
+        onNavigateToExercise={(e) => setSelectedExerciseId(e.id)}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.usageRow}>
-        <AiUsageIndicator
-          isPremium={aiGate.isPremium}
-          remaining={aiGate.remaining}
-          loaded={aiGate.loaded}
-        />
+        <AiUsageIndicator isPremium={aiGate.isPremium} remaining={aiGate.remaining} loaded={aiGate.loaded} />
       </View>
+
       <View style={styles.searchRow}>
         <TextInput
           style={styles.searchInput}
@@ -155,41 +145,58 @@ export default function ExerciseListScreen() {
           autoCapitalize="none"
         />
       </View>
+
+      <View style={styles.tabRow}>
+        {(['all', 'saved', 'custom'] as Tab[]).map((t) => (
+          <Pressable key={t} style={[styles.tabChip, tab === t && styles.tabChipActive]} onPress={() => setTab(t)}>
+            <Text style={[styles.tabChipText, tab === t && styles.tabChipTextActive]}>
+              {t === 'all' ? 'All' : t === 'saved' ? '★ Saved' : '✎ Custom'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <MuscleBodyMap availableMuscles={muscleGroups} selected={muscleFilter} onSelect={setMuscleFilter} />
+
       <View style={styles.filterRow}>
-        {FILTERS.map((f) => (
+        {CATEGORY_FILTERS.map((f) => (
           <Pressable
             key={f.value}
-            style={[styles.filterChip, filter === f.value && styles.filterChipActive]}
-            onPress={() => setFilter(f.value)}
+            style={[styles.filterChip, categoryFilter === f.value && styles.filterChipActive]}
+            onPress={() => setCategoryFilter(f.value)}
           >
-            <Text
-              style={[styles.filterChipText, filter === f.value && styles.filterChipTextActive]}
-            >
+            <Text style={[styles.filterChipText, categoryFilter === f.value && styles.filterChipTextActive]}>
               {f.label}
             </Text>
           </Pressable>
         ))}
       </View>
 
-      {muscleGroups.length > 0 && (
+      {equipmentOptions.length > 0 && (
         <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={styles.muscleFilterRow}
-          contentContainerStyle={styles.muscleFilterContent}
-          data={muscleGroups}
-          keyExtractor={(mg) => mg}
-          renderItem={({ item: mg }) => (
+          style={styles.equipmentRow}
+          contentContainerStyle={styles.equipmentContent}
+          data={equipmentOptions}
+          keyExtractor={(eq) => eq}
+          renderItem={({ item: eq }) => (
             <Pressable
-              style={[styles.muscleChip, muscleFilter === mg && styles.muscleChipActive]}
-              onPress={() => setMuscleFilter(muscleFilter === mg ? null : mg)}
+              style={[styles.equipmentChip, equipmentFilter === eq && styles.equipmentChipActive]}
+              onPress={() => setEquipmentFilter(equipmentFilter === eq ? null : eq)}
             >
-              <Text style={[styles.muscleChipText, muscleFilter === mg && styles.muscleChipTextActive]}>
-                {mg}
+              <Text style={[styles.equipmentChipText, equipmentFilter === eq && styles.equipmentChipTextActive]}>
+                {eq}
               </Text>
             </Pressable>
           )}
         />
+      )}
+
+      {tab === 'custom' && (
+        <Pressable style={styles.createCustomButton} onPress={() => setCreateModalVisible(true)}>
+          <Text style={styles.createCustomButtonText}>+ New Custom Exercise</Text>
+        </Pressable>
       )}
 
       {loading ? (
@@ -203,7 +210,11 @@ export default function ExerciseListScreen() {
       ) : filtered.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.empty}>
-            No exercises here yet. Add some in your Supabase dashboard's Table Editor.
+            {tab === 'custom'
+              ? 'No custom exercises yet — add one above.'
+              : tab === 'saved'
+                ? 'No saved exercises yet — tap the star on any exercise.'
+                : 'No exercises match these filters.'}
           </Text>
         </View>
       ) : (
@@ -212,116 +223,41 @@ export default function ExerciseListScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
-          renderItem={({ item }) => {
-            const expanded = expandedId === item.id;
-            const saved = savedIds.has(item.id);
-            return (
-              <Pressable
-                style={styles.card}
-                onPress={() => setExpandedId(expanded ? null : item.id)}
-              >
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardName}>{item.name}</Text>
-                  <Pressable
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      toggleSave(item);
-                    }}
-                    disabled={savingId === item.id}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.saveIcon}>{saved ? '★' : '☆'}</Text>
-                  </Pressable>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.category}</Text>
-                  </View>
-                </View>
-
-                {item.muscle_groups.length > 0 && (
-                  <Text style={styles.metaLine}>
-                    <Text style={styles.metaLabel}>Muscles: </Text>
-                    {item.muscle_groups.join(', ')}
-                  </Text>
-                )}
-                {item.equipment.length > 0 && (
-                  <Text style={styles.metaLine}>
-                    <Text style={styles.metaLabel}>Equipment: </Text>
-                    {item.equipment.join(', ')}
-                  </Text>
-                )}
-
-                {expanded && (
-                  <View style={styles.details}>
-                    {item.instructions ? (
-                      <>
-                        <Text style={styles.detailsLabel}>Instructions</Text>
-                        <Text style={styles.detailsText}>{item.instructions}</Text>
-                      </>
-                    ) : null}
-                    {item.benefits ? (
-                      <>
-                        <Text style={styles.detailsLabel}>Benefits</Text>
-                        <Text style={styles.detailsText}>{item.benefits}</Text>
-                      </>
-                    ) : null}
-
-                    <View style={styles.aiSection}>
-                      {(() => {
-                        const ai = aiExplanations[item.id];
-                        if (!ai) {
-                          return (
-                            <Pressable
-                              style={styles.aiButton}
-                              onPress={(e) => {
-                                e.stopPropagation();
-                                askAi(item);
-                              }}
-                            >
-                              <Text style={styles.aiButtonText}>Ask AI: form, sets/reps & mistakes</Text>
-                            </Pressable>
-                          );
-                        }
-                        if (ai.loading) {
-                          return (
-                            <View style={styles.aiLoadingRow}>
-                              <ActivityIndicator size="small" color={dark.accent} />
-                              <Text style={styles.aiLoadingText}>Asking AI...</Text>
-                            </View>
-                          );
-                        }
-                        if (ai.error) {
-                          return (
-                            <>
-                              <Text style={styles.aiError}>Couldn't get an AI explanation: {ai.error}</Text>
-                              <Pressable
-                                style={styles.aiButton}
-                                onPress={(e) => {
-                                  e.stopPropagation();
-                                  askAi(item);
-                                }}
-                              >
-                                <Text style={styles.aiButtonText}>Try again</Text>
-                              </Pressable>
-                            </>
-                          );
-                        }
-                        return (
-                          <>
-                            <Text style={styles.detailsLabel}>AI Explanation</Text>
-                            <Text style={styles.detailsText}>{ai.text}</Text>
-                          </>
-                        );
-                      })()}
-                    </View>
-                  </View>
-                )}
-
-                <Text style={styles.expandHint}>{expanded ? 'Tap to collapse' : 'Tap for details'}</Text>
-              </Pressable>
-            );
-          }}
+          renderItem={({ item }) => (
+            <View>
+              <ExerciseCard
+                exercise={item}
+                saved={savedIds.has(item.id)}
+                savingId={savingId}
+                onPress={() => setSelectedExerciseId(item.id)}
+                onToggleSave={() => toggleSave(item)}
+                onQuickAdd={() => setQuickAddExercise(item)}
+              />
+              {tab === 'custom' && item.created_by === userId && (
+                <Pressable style={styles.deleteCustomButton} onPress={() => handleDeleteCustom(item.id)}>
+                  <Text style={styles.deleteCustomButtonText}>Delete custom exercise</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
         />
       )}
+
+      <QuickAddToPlanModal
+        visible={!!quickAddExercise}
+        exerciseId={quickAddExercise?.id ?? null}
+        exerciseName={quickAddExercise?.name ?? ''}
+        onClose={() => setQuickAddExercise(null)}
+      />
+
+      <CreateCustomExerciseModal
+        visible={createModalVisible}
+        onClose={() => setCreateModalVisible(false)}
+        onCreated={() => {
+          setCreateModalVisible(false);
+          load();
+        }}
+      />
     </View>
   );
 }
@@ -349,6 +285,32 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
   },
+  tabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    gap: 8,
+  },
+  tabChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: dark.surface,
+    borderWidth: 1,
+    borderColor: dark.border,
+  },
+  tabChipActive: {
+    backgroundColor: dark.accent,
+    borderColor: dark.accent,
+  },
+  tabChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: dark.textMuted,
+  },
+  tabChipTextActive: {
+    color: '#0a0a0a',
+  },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -375,32 +337,46 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: '#0a0a0a',
   },
-  muscleFilterRow: {
+  equipmentRow: {
     marginBottom: 12,
   },
-  muscleFilterContent: {
+  equipmentContent: {
     paddingHorizontal: 20,
     gap: 8,
   },
-  muscleChip: {
+  equipmentChip: {
     paddingVertical: 5,
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: dark.border,
   },
-  muscleChipActive: {
+  equipmentChipActive: {
     backgroundColor: dark.surfaceElevated,
     borderColor: dark.accent,
   },
-  muscleChipText: {
+  equipmentChipText: {
     fontSize: 12,
     color: dark.textFaint,
     textTransform: 'capitalize',
   },
-  muscleChipTextActive: {
+  equipmentChipTextActive: {
     color: dark.accent,
     fontWeight: '600',
+  },
+  createCustomButton: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: dark.accent,
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  createCustomButtonText: {
+    color: dark.accent,
+    fontWeight: '700',
+    fontSize: 13,
   },
   centered: {
     flex: 1,
@@ -420,101 +396,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
-  card: {
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 12,
-    padding: 16,
+  deleteCustomButton: {
+    marginTop: -6,
     marginBottom: 12,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 8,
-  },
-  cardName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: dark.text,
-    flex: 1,
-  },
-  saveIcon: {
-    fontSize: 20,
-    color: dark.accent,
-  },
-  badge: {
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: dark.surfaceElevated,
-  },
-  badgeText: {
-    color: dark.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  metaLine: {
-    fontSize: 13,
-    color: dark.textMuted,
-    marginTop: 2,
-  },
-  metaLabel: {
-    fontWeight: '600',
-    color: dark.text,
-  },
-  details: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: dark.border,
-  },
-  detailsLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: dark.text,
-    marginTop: 6,
-    textTransform: 'uppercase',
-  },
-  detailsText: {
-    fontSize: 14,
-    color: dark.textMuted,
-    marginTop: 2,
-    lineHeight: 20,
-  },
-  aiSection: {
-    marginTop: 12,
-  },
-  aiButton: {
-    backgroundColor: dark.accent,
-    borderRadius: 8,
-    paddingVertical: 10,
     alignItems: 'center',
   },
-  aiButtonText: {
-    color: '#0a0a0a',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  aiLoadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  aiLoadingText: {
-    fontSize: 13,
-    color: dark.textMuted,
-  },
-  aiError: {
-    fontSize: 13,
+  deleteCustomButtonText: {
     color: dark.danger,
-    marginBottom: 8,
-  },
-  expandHint: {
     fontSize: 11,
-    color: dark.textFaint,
-    marginTop: 10,
+    fontWeight: '600',
   },
 });

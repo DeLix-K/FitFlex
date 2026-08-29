@@ -313,3 +313,32 @@ export function buildExerciseExplanationPrompt(exercise: {
     'Write for a beginner. Do not use markdown formatting, just plain sentences/paragraphs.'
   );
 }
+
+export function buildFormGuardrailsPrompt(exercise: { name: string; muscle_groups: string[] }): string {
+  return (
+    `For the exercise "${exercise.name}" (targets: ${exercise.muscle_groups.join(', ')}), give exactly ` +
+    '3 short "do" form cues and exactly 3 short "don\'t" mistakes to avoid. Respond in EXACTLY this ' +
+    'format, one per line, no extra text before/after, no markdown:\n' +
+    'DO: <cue 1>\nDO: <cue 2>\nDO: <cue 3>\nDONT: <mistake 1>\nDONT: <mistake 2>\nDONT: <mistake 3>\n' +
+    'Each line under 12 words.'
+  );
+}
+
+export function parseFormGuardrails(text: string): { dos: string[]; donts: string[] } {
+  const dos: string[] = [];
+  const donts: string[] = [];
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.toUpperCase().startsWith('DO:')) dos.push(trimmed.slice(3).trim());
+    else if (trimmed.toUpperCase().startsWith("DONT:")) donts.push(trimmed.slice(5).trim());
+  }
+  return { dos, donts };
+}
+
+export function buildMindMuscleCuePrompt(exercise: { name: string; muscle_groups: string[] }): string {
+  const primary = exercise.muscle_groups[0] ?? 'the target muscle';
+  return (
+    `In ONE short sentence (under 20 words), give a mind-muscle-connection cue for "${exercise.name}" ` +
+    `focused on feeling it in the ${primary}. Plain spoken sentence, no markdown, no preamble.`
+  );
+}

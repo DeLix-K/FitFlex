@@ -1,0 +1,259 @@
+import { supabase } from './supabase';
+import type { Exercise, ExerciseSetLog } from './types';
+
+function todayLocalDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Same locale heuristic used for the Bench Press challenge template.
+export function detectWeightUnit(): 'kg' | 'lb' {
+  try {
+    const locale = Intl.NumberFormat().resolvedOptions().locale;
+    return locale.toUpperCase().includes('US') ? 'lb' : 'kg';
+  } catch {
+    return 'kg';
+  }
+}
+
+// muscle_groups is ordered primary-first in every catalog row (see
+// exercises_overhaul.sql) -- these two helpers are the single source of
+// truth for that convention so it's never re-guessed inconsistently.
+export function primaryMuscle(exercise: Exercise): string | null {
+  return exercise.muscle_groups[0] ?? null;
+}
+
+export function secondaryMuscles(exercise: Exercise): string[] {
+  return exercise.muscle_groups.slice(1);
+}
+
+export async function fetchExercises(): Promise<Exercise[]> {
+  const { data, error } = await supabase.from('exercises').select('*').order('name', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function createCustomExercise(params: {
+  name: string;
+  category: Exercise['category'];
+  muscleGroups: string[];
+  equipment: string[];
+}): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+
+  const { error } = await supabase.from('exercises').insert({
+    name: params.name.trim(),
+    category: params.category,
+    muscle_groups: params.muscleGroups,
+    equipment: params.equipment,
+    created_by: userId,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteCustomExercise(exerciseId: string): Promise<void> {
+  const { error } = await supabase.from('exercises').delete().eq('id', exerciseId);
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchSavedExerciseIds(): Promise<Set<string>> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return new Set();
+
+  const { data, error } = await supabase.from('saved_exercises').select('exercise_id').eq('user_id', userId);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r: { exercise_id: string }) => r.exercise_id));
+}
+
+export async function setExerciseSaved(exerciseId: string, saved: boolean): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+
+  if (saved) {
+    const { error } = await supabase.from('saved_exercises').insert({ user_id: userId, exercise_id: exerciseId });
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase
+      .from('saved_exercises')
+      .delete()
+      .eq('user_id', userId)
+      .eq('exercise_id', exerciseId);
+    if (error) throw new Error(error.message);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Quick-add to an existing plan -- reuses workout_plans/workout_plan_exercises
+// exactly as the Plans tab does, no new schema.
+// ─────────────────────────────────────────────
+export type PlanOption = { id: string; name: string };
+
+export async function fetchMyPlans(): Promise<PlanOption[]> {
+  const { data, error } = await supabase
+    .from('workout_plans')
+    .select('id, name')
+    .order('updated_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function addExerciseToPlan(planId: string, exerciseId: string): Promise<void> {
+  const { count, error: countError } = await supabase
+    .from('workout_plan_exercises')
+    .select('id', { count: 'exact', head: true })
+    .eq('workout_plan_id', planId);
+  if (countError) throw new Error(countError.message);
+
+  const { error } = await supabase.from('workout_plan_exercises').insert({
+    workout_plan_id: planId,
+    exercise_id: exerciseId,
+    order_index: count ?? 0,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// ─────────────────────────────────────────────
+// Smart substitution: real filtering over the real catalog -- same primary
+// muscle, different exercise, optionally narrowed by equipment or
+// joint-friendliness. Never invents an exercise that isn't in the catalog.
+// ─────────────────────────────────────────────
+export function findSubstitutes(
+  exercise: Exercise,
+  allExercises: Exercise[],
+  opts: { equipment?: string | null; lowImpactOnly?: boolean } = {}
+): Exercise[] {
+  const primary = primaryMuscle(exercise);
+  if (!primary) return [];
+
+  return allExercises.filter((e) => {
+    if (e.id === exercise.id) return false;
+    if (primaryMuscle(e) !== primary) return false;
+    if (opts.lowImpactOnly && !e.low_impact) return false;
+    if (opts.equipment) {
+      const wantsBodyweight = opts.equipment === 'bodyweight';
+      if (wantsBodyweight && e.equipment.length > 0) return false;
+      if (!wantsBodyweight && !e.equipment.includes(opts.equipment)) return false;
+    }
+    return true;
+  });
+}
+
+// ─────────────────────────────────────────────
+// Antagonist superset pairing: a small, hand-curated map of well-known
+// agonist/antagonist muscle pairs (standard training knowledge), applied
+// to the real catalog. Labeled as "commonly paired," not as data mined
+// from real usage, since this app doesn't have per-set usage stats to mine
+// yet for that claim.
+// ─────────────────────────────────────────────
+const ANTAGONIST_MUSCLE: Record<string, string> = {
+  chest: 'back',
+  back: 'chest',
+  biceps: 'triceps',
+  triceps: 'biceps',
+  quadriceps: 'hamstrings',
+  hamstrings: 'quadriceps',
+};
+
+export function findAntagonistCombo(exercise: Exercise, allExercises: Exercise[]): Exercise | null {
+  const primary = primaryMuscle(exercise);
+  if (!primary) return null;
+  const antagonist = ANTAGONIST_MUSCLE[primary];
+  if (!antagonist) return null;
+
+  return allExercises.find((e) => e.id !== exercise.id && primaryMuscle(e) === antagonist) ?? null;
+}
+
+// ─────────────────────────────────────────────
+// Real per-set logging -> real PR / volume / estimated-1RM history.
+// ─────────────────────────────────────────────
+export async function logExerciseSet(params: {
+  exerciseId: string;
+  weight: number;
+  weightUnit: 'kg' | 'lb';
+  reps: number;
+}): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+
+  const { error } = await supabase.from('exercise_set_logs').insert({
+    user_id: userId,
+    exercise_id: params.exerciseId,
+    logged_date: todayLocalDate(),
+    weight: params.weight,
+    weight_unit: params.weightUnit,
+    reps: params.reps,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchExerciseSetHistory(exerciseId: string, days = 180): Promise<ExerciseSetLog[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return [];
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('exercise_set_logs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('exercise_id', exerciseId)
+    .gte('logged_date', since)
+    .order('logged_date', { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+// Epley formula -- a standard, widely-used 1RM estimate, not a fabricated
+// number. Always labeled "Est." in the UI.
+export function estimatedOneRepMax(weight: number, reps: number): number {
+  if (reps <= 1) return weight;
+  return weight * (1 + reps / 30);
+}
+
+export type ExercisePr = {
+  bestWeight: number;
+  bestWeightUnit: 'kg' | 'lb';
+  bestEst1RM: number;
+  totalSets: number;
+} | null;
+
+export function computePr(history: ExerciseSetLog[]): ExercisePr {
+  if (history.length === 0) return null;
+
+  let best = history[0];
+  let bestEst1RM = estimatedOneRepMax(best.weight, best.reps);
+  for (const log of history) {
+    const est = estimatedOneRepMax(log.weight, log.reps);
+    if (est > bestEst1RM) {
+      bestEst1RM = est;
+      best = log;
+    }
+  }
+
+  return {
+    bestWeight: best.weight,
+    bestWeightUnit: best.weight_unit,
+    bestEst1RM: Math.round(bestEst1RM * 10) / 10,
+    totalSets: history.length,
+  };
+}
+
+// One point per day: total volume (weight * reps summed across that day's
+// sets) -- for the inline volume trend chart.
+export function volumeByDate(history: ExerciseSetLog[]): { date: string; volume: number }[] {
+  const byDate = new Map<string, number>();
+  for (const log of history) {
+    byDate.set(log.logged_date, (byDate.get(log.logged_date) ?? 0) + log.weight * log.reps);
+  }
+  return [...byDate.entries()].map(([date, volume]) => ({ date, volume })).sort((a, b) => a.date.localeCompare(b.date));
+}
