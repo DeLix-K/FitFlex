@@ -256,16 +256,29 @@ export type TrainerOrderView = {
   client_display_name: string;
 };
 
+export type HabitType = 'boolean' | 'numeric';
+export type HabitTimeOfDay = 'morning' | 'midday' | 'evening' | 'anytime';
+export type HabitAutoSyncSource = 'sleep_duration' | 'oura_steps' | 'workout_done';
+export type HabitTier = 'gold' | 'silver' | 'bronze' | null;
+
 export type Habit = {
   id: string;
   user_id: string;
   name: string;
   created_at: string;
+  habit_type: HabitType;
+  target_value: number | null;
+  unit: string | null;
+  time_of_day: HabitTimeOfDay;
+  auto_sync_source: HabitAutoSyncSource | null;
 };
 
 export type HabitWithStatus = Habit & {
   current_streak: number;
   done_today: boolean;
+  progress_today: number | null;
+  tier_today: HabitTier;
+  auto_logged_today: boolean;
 };
 
 export type Course = {

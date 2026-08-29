@@ -1,33 +1,80 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import CreateHabitModal from '../components/CreateHabitModal';
+import HabitFreezeFooter from '../components/HabitFreezeFooter';
+import HabitInsightCard from '../components/HabitInsightCard';
+import HabitMomentumRing from '../components/HabitMomentumRing';
+import HabitTimeSection from '../components/HabitTimeSection';
 import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { checkInToday, createHabit, deleteHabit, fetchHabits, uncheckToday } from '../lib/habits';
+  autoSyncHabits,
+  checkInToday,
+  computeHabitCorrelations,
+  deleteHabit,
+  fetchHabitLogHistory,
+  fetchHabitMomentum,
+  fetchHabits,
+  fetchWorkoutLogHistory,
+  grantHabitFreezeIfEarned,
+  logProgressToday,
+  uncheckToday,
+  useHabitFreeze,
+} from '../lib/habits';
+import { fetchSleepHistory } from '../lib/sleep';
+import { fetchStreakFreezeBalance } from '../lib/streaks';
 import { dark } from '../lib/theme';
 import type { HabitWithStatus } from '../lib/types';
 
+function todayLocalDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function currentTimeBucket(): 'morning' | 'midday' | 'evening' {
+  const h = new Date().getHours();
+  if (h >= 4 && h < 12) return 'morning';
+  if (h >= 12 && h < 17) return 'midday';
+  return 'evening';
+}
+
 export default function HabitsScreen() {
   const [habits, setHabits] = useState<HabitWithStatus[]>([]);
+  const [momentum, setMomentum] = useState(0);
+  const [freezeBalance, setFreezeBalance] = useState(0);
+  const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [freezeUsedToday, setFreezeUsedToday] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const activeBucket = useMemo(currentTimeBucket, []);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const data = await fetchHabits();
+      let data = await fetchHabits();
+      const didAutoSync = await autoSyncHabits(data).catch(() => false);
+      if (didAutoSync) data = await fetchHabits();
       setHabits(data);
+
+      const [freezeGrant, freezeRow, momentumStreak] = await Promise.all([
+        grantHabitFreezeIfEarned().catch(() => null),
+        fetchStreakFreezeBalance().catch(() => null),
+        fetchHabitMomentum().catch(() => 0),
+      ]);
+      setFreezeBalance(freezeGrant ?? freezeRow?.balance ?? 0);
+      setMomentum(momentumStreak);
+
+      const [habitHistory, workoutHistory, sleepHistory] = await Promise.all([
+        fetchHabitLogHistory().catch(() => []),
+        fetchWorkoutLogHistory().catch(() => []),
+        fetchSleepHistory(60).catch(() => []),
+      ]);
+      setInsight(computeHabitCorrelations(data, habitHistory, workoutHistory, sleepHistory));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -44,23 +91,7 @@ export default function HabitsScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await createHabit(newName);
-      setNewName('');
-      setAdding(false);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleToggle = async (habit: HabitWithStatus) => {
+  const handleToggleBoolean = async (habit: HabitWithStatus) => {
     setBusyId(habit.id);
     setError(null);
     try {
@@ -71,6 +102,15 @@ export default function HabitsScreen() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleSaveProgress = async (habit: HabitWithStatus, value: number) => {
+    try {
+      await logProgressToday(habit.id, value);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -87,11 +127,48 @@ export default function HabitsScreen() {
     }
   };
 
+  const handleUseFreeze = async () => {
+    const ok = await useHabitFreeze(todayLocalDate());
+    if (ok) {
+      setFreezeUsedToday(true);
+      await load();
+    } else {
+      throw new Error('Could not use a freeze — check your balance.');
+    }
+  };
+
   const completionPct = useMemo(() => {
     if (habits.length === 0) return 0;
     const done = habits.filter((h) => h.done_today).length;
     return Math.round((done / habits.length) * 100);
   }, [habits]);
+
+  const momentumMessage = useMemo(() => {
+    if (habits.length === 0) return 'Add your first habit to start building momentum.';
+    const remaining = habits.filter((h) => !h.done_today).length;
+    if (remaining === 0) return 'All habits complete today! 🎉';
+    return `${remaining} more habit${remaining === 1 ? '' : 's'} to go today.`;
+  }, [habits]);
+
+  const grouped = useMemo(() => {
+    const buckets: Record<'morning' | 'midday' | 'evening', HabitWithStatus[]> = {
+      morning: [],
+      midday: [],
+      evening: [],
+    };
+    for (const habit of habits) {
+      const bucket = habit.time_of_day === 'anytime' ? activeBucket : habit.time_of_day;
+      buckets[bucket].push(habit);
+    }
+    return buckets;
+  }, [habits, activeBucket]);
+
+  const sectionOrder = useMemo(() => {
+    const order: ('morning' | 'midday' | 'evening')[] = ['morning', 'midday', 'evening'];
+    return [activeBucket, ...order.filter((s) => s !== activeBucket)];
+  }, [activeBucket]);
+
+  const momentumSecuredToday = habits.some((h) => h.done_today) || freezeUsedToday;
 
   if (loading) {
     return (
@@ -102,88 +179,61 @@ export default function HabitsScreen() {
   }
 
   return (
-    <FlatList
+    <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
-      ListHeaderComponent={
-        <>
-          <Text style={styles.title}>Habits</Text>
-          <Text style={styles.subtitle}>Build daily habits and watch your streaks grow.</Text>
-          {error && <Text style={styles.error}>{error}</Text>}
+    >
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Habit Hub</Text>
+        <Pressable style={styles.addButton} onPress={() => setModalVisible(true)}>
+          <Text style={styles.addButtonText}>+ New Habit</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.subtitle}>Consistency over perfection — momentum forgives a missed day.</Text>
+      {error && <Text style={styles.error}>{error}</Text>}
 
-          {adding ? (
-            <View style={styles.newRow}>
-              <TextInput
-                style={styles.newInput}
-                placeholder="New habit (e.g. Drink water)"
-                placeholderTextColor={dark.textFaint}
-                value={newName}
-                onChangeText={setNewName}
-                onSubmitEditing={handleCreate}
-                autoFocus
-              />
-              <Pressable style={styles.addButton} onPress={handleCreate} disabled={creating}>
-                {creating ? (
-                  <ActivityIndicator size="small" color="#0a0a0a" />
-                ) : (
-                  <Text style={styles.addButtonText}>Add</Text>
-                )}
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable style={styles.createButton} onPress={() => setAdding(true)}>
-              <Text style={styles.createButtonText}>+ Create New Habit</Text>
-            </Pressable>
-          )}
-        </>
-      }
-      data={habits}
-      keyExtractor={(item) => item.id}
-      ListEmptyComponent={
-        <Text style={styles.empty}>No habits yet — add one above to get started.</Text>
-      }
-      renderItem={({ item }) => (
-        <View style={styles.row}>
-          <Pressable
-            style={[styles.checkbox, item.done_today && styles.checkboxDone]}
-            onPress={() => handleToggle(item)}
-            disabled={busyId === item.id}
-          >
-            {busyId === item.id ? (
-              <ActivityIndicator size="small" color={item.done_today ? '#0a0a0a' : dark.accent} />
-            ) : (
-              item.done_today && <Text style={styles.checkboxMark}>✓</Text>
-            )}
-          </Pressable>
+      <HabitMomentumRing
+        completionPct={completionPct}
+        message={momentumMessage}
+        momentumStreak={momentum}
+        freezeBalance={freezeBalance}
+      />
 
-          <View style={styles.rowMiddle}>
-            <Text style={styles.habitName}>{item.name}</Text>
-            <Text style={styles.habitStreak}>
-              {item.current_streak > 0 ? `🔥 ${item.current_streak} day streak` : 'No streak yet'}
-            </Text>
-          </View>
-
-          <Text style={[styles.statusTag, item.done_today ? styles.statusDone : styles.statusPending]}>
-            {item.done_today ? 'Complete' : 'Pending'}
-          </Text>
-
-          <Pressable onPress={() => handleDelete(item.id)} disabled={busyId === item.id}>
-            <Text style={styles.remove}>Remove</Text>
-          </Pressable>
-        </View>
+      {habits.length === 0 ? (
+        <Text style={styles.empty}>No habits yet — tap "+ New Habit" to get started.</Text>
+      ) : (
+        sectionOrder.map((section) => (
+          <HabitTimeSection
+            key={section}
+            timeOfDay={section}
+            habits={grouped[section]}
+            isActive={section === activeBucket}
+            busyId={busyId}
+            onToggleBoolean={handleToggleBoolean}
+            onSaveProgress={handleSaveProgress}
+            onDelete={handleDelete}
+          />
+        ))
       )}
-      ListFooterComponent={
-        habits.length > 0 ? (
-          <View style={styles.completionBar}>
-            <Text style={styles.completionLabel}>Today's Completion: {completionPct}%</Text>
-            <View style={styles.completionTrack}>
-              <View style={[styles.completionFill, { width: `${completionPct}%` }]} />
-            </View>
-          </View>
-        ) : null
-      }
-    />
+
+      <HabitInsightCard insight={insight} />
+
+      <HabitFreezeFooter
+        freezeBalance={freezeBalance}
+        alreadyCoveredToday={momentumSecuredToday}
+        onUseFreeze={handleUseFreeze}
+      />
+
+      <CreateHabitModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onCreated={() => {
+          setModalVisible(false);
+          load();
+        }}
+      />
+    </ScrollView>
   );
 }
 
@@ -203,145 +253,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   title: {
     color: dark.text,
     fontSize: 22,
     fontWeight: '700',
   },
+  addButton: {
+    backgroundColor: dark.accent,
+    borderRadius: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  addButtonText: {
+    color: '#0a0a0a',
+    fontWeight: '700',
+    fontSize: 12,
+  },
   subtitle: {
     fontSize: 13,
     color: dark.textFaint,
     marginTop: 4,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   error: {
     color: dark.danger,
     marginBottom: 12,
   },
-  newRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  newInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    color: dark.text,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  addButton: {
-    backgroundColor: dark.accent,
-    borderRadius: 8,
-    paddingHorizontal: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 64,
-  },
-  addButtonText: {
-    color: '#0a0a0a',
-    fontWeight: '700',
-  },
-  createButton: {
-    borderWidth: 1,
-    borderColor: dark.accent,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  createButtonText: {
-    color: dark.accent,
-    fontWeight: '700',
-  },
   empty: {
     color: dark.textFaint,
     textAlign: 'center',
-    marginTop: 12,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    gap: 10,
-  },
-  checkbox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: dark.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxDone: {
-    backgroundColor: dark.accent,
-  },
-  checkboxMark: {
-    color: '#0a0a0a',
-    fontWeight: '700',
-  },
-  rowMiddle: {
-    flex: 1,
-  },
-  habitName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: dark.text,
-  },
-  habitStreak: {
-    fontSize: 12,
-    color: dark.textMuted,
-    marginTop: 2,
-  },
-  statusTag: {
-    fontSize: 10,
-    fontWeight: '700',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  statusDone: {
-    color: '#0a0a0a',
-    backgroundColor: dark.accent,
-  },
-  statusPending: {
-    color: dark.textMuted,
-    backgroundColor: dark.surfaceElevated,
-  },
-  remove: {
-    color: dark.danger,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  completionBar: {
-    marginTop: 8,
-  },
-  completionLabel: {
-    color: dark.text,
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  completionTrack: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: dark.surfaceElevated,
-    overflow: 'hidden',
-  },
-  completionFill: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: dark.accent,
+    marginTop: 20,
+    marginBottom: 20,
   },
 });
