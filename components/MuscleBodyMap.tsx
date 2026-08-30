@@ -109,13 +109,7 @@ export default function MuscleBodyMap({
         })}
       </View>
 
-      <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>◎ {view === 'front' ? 'Front' : 'Back'} View</Text>
-        <Text style={styles.infoBody}>Select a muscle group to see exercises and workouts.</Text>
-        <View style={styles.infoDivider} />
-        <Text style={styles.infoTitle}>💡 Tip</Text>
-        <Text style={styles.infoBody}>Tap on any muscle group to highlight exercises.</Text>
-      </View>
+      <Text style={styles.hint}>💡 Tap a muscle group to filter the exercises below.</Text>
 
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
@@ -151,6 +145,8 @@ export default function MuscleBodyMap({
           })}
         </View>
       )}
+
+      <Text style={styles.scrollHint}>↓ Scroll down for exercises</Text>
     </View>
   );
 }
@@ -202,35 +198,16 @@ const styles = StyleSheet.create({
     borderColor: dark.accent,
     backgroundColor: 'rgba(163, 230, 53, 0.18)',
   },
-  infoCard: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surfaceElevated,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 14,
-  },
-  infoTitle: {
-    color: dark.accent,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  infoBody: {
+  hint: {
     color: dark.textMuted,
     fontSize: 12,
-    lineHeight: 17,
-  },
-  infoDivider: {
-    height: 1,
-    backgroundColor: dark.border,
-    marginVertical: 10,
+    textAlign: 'center',
+    marginBottom: 10,
   },
   legendRow: {
     flexDirection: 'row',
     gap: 20,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   legendItem: {
     flexDirection: 'row',
@@ -273,5 +250,10 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: dark.accent,
+  },
+  scrollHint: {
+    color: dark.textFaint,
+    fontSize: 11,
+    marginTop: 12,
   },
 });
