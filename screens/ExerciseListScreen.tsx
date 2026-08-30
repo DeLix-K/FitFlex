@@ -129,119 +129,134 @@ export default function ExerciseListScreen() {
     );
   }
 
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color={dark.accent} />
+      </View>
+    );
+  }
+
+  // Everything (search/tabs/body map/filters) is the FlatList's own
+  // ListHeaderComponent rather than a sibling View above a separate list --
+  // this app disables body-level scroll on web (react-native-web's
+  // recommended reset), so each screen's OWN FlatList/ScrollView has to be
+  // the single thing that scrolls. Splitting the header out into a plain
+  // View meant the FlatList only got whatever height was left over after
+  // the header, which could be squeezed to near-zero (and the list
+  // silently unusable, even though the data was really there) once the
+  // header grew tall enough -- exactly what happened once the muscle body
+  // map was added. One FlatList for the whole screen avoids that class of
+  // bug entirely, matching every other screen built this session.
   return (
     <View style={styles.container}>
-      <View style={styles.usageRow}>
-        <AiUsageIndicator isPremium={aiGate.isPremium} remaining={aiGate.remaining} loaded={aiGate.loaded} />
-      </View>
-
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search exercises..."
-          placeholderTextColor={dark.textFaint}
-          value={search}
-          onChangeText={setSearch}
-          autoCapitalize="none"
-        />
-      </View>
-
-      <View style={styles.tabRow}>
-        {(['all', 'saved', 'custom'] as Tab[]).map((t) => (
-          <Pressable key={t} style={[styles.tabChip, tab === t && styles.tabChipActive]} onPress={() => setTab(t)}>
-            <Text style={[styles.tabChipText, tab === t && styles.tabChipTextActive]}>
-              {t === 'all' ? 'All' : t === 'saved' ? '★ Saved' : '✎ Custom'}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <MuscleBodyMap availableMuscles={muscleGroups} selected={muscleFilter} onSelect={setMuscleFilter} />
-
-      <View style={styles.filterRow}>
-        {CATEGORY_FILTERS.map((f) => (
-          <Pressable
-            key={f.value}
-            style={[styles.filterChip, categoryFilter === f.value && styles.filterChipActive]}
-            onPress={() => setCategoryFilter(f.value)}
-          >
-            <Text style={[styles.filterChipText, categoryFilter === f.value && styles.filterChipTextActive]}>
-              {f.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {equipmentOptions.length > 0 && (
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.equipmentRow}
-          contentContainerStyle={styles.equipmentContent}
-          data={equipmentOptions}
-          keyExtractor={(eq) => eq}
-          renderItem={({ item: eq }) => (
-            <Pressable
-              style={[styles.equipmentChip, equipmentFilter === eq && styles.equipmentChipActive]}
-              onPress={() => setEquipmentFilter(equipmentFilter === eq ? null : eq)}
-            >
-              <Text style={[styles.equipmentChipText, equipmentFilter === eq && styles.equipmentChipTextActive]}>
-                {eq}
-              </Text>
-            </Pressable>
-          )}
-        />
-      )}
-
-      {tab === 'custom' && (
-        <Pressable style={styles.createCustomButton} onPress={() => setCreateModalVisible(true)}>
-          <Text style={styles.createCustomButtonText}>+ New Custom Exercise</Text>
-        </Pressable>
-      )}
-
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={dark.accent} />
-        </View>
-      ) : error ? (
-        <View style={styles.centered}>
-          <Text style={styles.error}>{error}</Text>
-        </View>
-      ) : filtered.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.empty}>
-            {tab === 'custom'
-              ? 'No custom exercises yet — add one above.'
-              : tab === 'saved'
-                ? 'No saved exercises yet — tap the star on any exercise.'
-                : 'No exercises match these filters.'}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
-          renderItem={({ item }) => (
-            <View>
-              <ExerciseCard
-                exercise={item}
-                saved={savedIds.has(item.id)}
-                savingId={savingId}
-                onPress={() => setSelectedExerciseId(item.id)}
-                onToggleSave={() => toggleSave(item)}
-                onQuickAdd={() => setQuickAddExercise(item)}
-              />
-              {tab === 'custom' && item.created_by === userId && (
-                <Pressable style={styles.deleteCustomButton} onPress={() => handleDeleteCustom(item.id)}>
-                  <Text style={styles.deleteCustomButtonText}>Delete custom exercise</Text>
-                </Pressable>
-              )}
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={dark.accent} />}
+        ListHeaderComponent={
+          <>
+            <View style={styles.usageRow}>
+              <AiUsageIndicator isPremium={aiGate.isPremium} remaining={aiGate.remaining} loaded={aiGate.loaded} />
             </View>
-          )}
-        />
-      )}
+
+            <View style={styles.searchRow}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search exercises..."
+                placeholderTextColor={dark.textFaint}
+                value={search}
+                onChangeText={setSearch}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.tabRow}>
+              {(['all', 'saved', 'custom'] as Tab[]).map((t) => (
+                <Pressable key={t} style={[styles.tabChip, tab === t && styles.tabChipActive]} onPress={() => setTab(t)}>
+                  <Text style={[styles.tabChipText, tab === t && styles.tabChipTextActive]}>
+                    {t === 'all' ? 'All' : t === 'saved' ? '★ Saved' : '✎ Custom'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <MuscleBodyMap availableMuscles={muscleGroups} selected={muscleFilter} onSelect={setMuscleFilter} />
+
+            <View style={styles.filterRow}>
+              {CATEGORY_FILTERS.map((f) => (
+                <Pressable
+                  key={f.value}
+                  style={[styles.filterChip, categoryFilter === f.value && styles.filterChipActive]}
+                  onPress={() => setCategoryFilter(f.value)}
+                >
+                  <Text style={[styles.filterChipText, categoryFilter === f.value && styles.filterChipTextActive]}>
+                    {f.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {equipmentOptions.length > 0 && (
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.equipmentRow}
+                contentContainerStyle={styles.equipmentContent}
+                data={equipmentOptions}
+                keyExtractor={(eq) => eq}
+                renderItem={({ item: eq }) => (
+                  <Pressable
+                    style={[styles.equipmentChip, equipmentFilter === eq && styles.equipmentChipActive]}
+                    onPress={() => setEquipmentFilter(equipmentFilter === eq ? null : eq)}
+                  >
+                    <Text style={[styles.equipmentChipText, equipmentFilter === eq && styles.equipmentChipTextActive]}>
+                      {eq}
+                    </Text>
+                  </Pressable>
+                )}
+              />
+            )}
+
+            {tab === 'custom' && (
+              <Pressable style={styles.createCustomButton} onPress={() => setCreateModalVisible(true)}>
+                <Text style={styles.createCustomButtonText}>+ New Custom Exercise</Text>
+              </Pressable>
+            )}
+
+            {error && <Text style={styles.error}>{error}</Text>}
+          </>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <Text style={styles.empty}>
+              {tab === 'custom'
+                ? 'No custom exercises yet — add one above.'
+                : tab === 'saved'
+                  ? 'No saved exercises yet — tap the star on any exercise.'
+                  : 'No exercises match these filters.'}
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View>
+            <ExerciseCard
+              exercise={item}
+              saved={savedIds.has(item.id)}
+              savingId={savingId}
+              onPress={() => setSelectedExerciseId(item.id)}
+              onToggleSave={() => toggleSave(item)}
+              onQuickAdd={() => setQuickAddExercise(item)}
+            />
+            {tab === 'custom' && item.created_by === userId && (
+              <Pressable style={styles.deleteCustomButton} onPress={() => handleDeleteCustom(item.id)}>
+                <Text style={styles.deleteCustomButtonText}>Delete custom exercise</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+      />
 
       <QuickAddToPlanModal
         visible={!!quickAddExercise}
@@ -380,13 +395,19 @@ const styles = StyleSheet.create({
   },
   centered: {
     flex: 1,
+    backgroundColor: dark.background,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  emptyWrap: {
     paddingHorizontal: 32,
+    paddingTop: 20,
   },
   error: {
     color: dark.danger,
     textAlign: 'center',
+    marginHorizontal: 20,
+    marginBottom: 12,
   },
   empty: {
     color: dark.textFaint,
