@@ -20,7 +20,7 @@ import HabitsScreen from './screens/HabitsScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import ManageVideosScreen from './screens/ManageVideosScreen';
 import MerchScreen from './screens/MerchScreen';
-import NutritionSearchScreen from './screens/NutritionSearchScreen';
+import NutritionScreen from './screens/NutritionScreen';
 import PlansScreen from './screens/PlansScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
@@ -137,7 +137,7 @@ export default function App() {
           {activeTab === 'scan' && <EquipmentScanScreen />}
           {activeTab === 'foodScan' && <FoodScanScreen />}
           {activeTab === 'formCheck' && <FormCheckScreen />}
-          {activeTab === 'nutrition' && <NutritionSearchScreen />}
+          {activeTab === 'nutrition' && <NutritionScreen onNavigate={setActiveTab} />}
           {activeTab === 'trainers' && <TrainersScreen />}
           {activeTab === 'trainerDashboard' && <TrainerDashboardScreen />}
           {activeTab === 'courses' && <CoursesScreen />}

@@ -5,6 +5,8 @@ export type UsdaFoodMatch = {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  fiber: number | null;
+  iron: number | null;
 };
 
 type UsdaNutrient = { nutrientName: string; value: number; unitName: string };
@@ -48,6 +50,8 @@ export async function searchUsdaFoods(query: string): Promise<UsdaFoodMatch[]> {
     protein: getNutrient(food.foodNutrients, 'Protein'),
     carbs: getNutrient(food.foodNutrients, 'Carbohydrate, by difference'),
     fat: getNutrient(food.foodNutrients, 'Total lipid (fat)'),
+    fiber: getNutrient(food.foodNutrients, 'Fiber, total dietary'),
+    iron: getNutrient(food.foodNutrients, 'Iron, Fe'),
   }));
 }
 

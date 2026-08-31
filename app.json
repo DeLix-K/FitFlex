@@ -38,6 +38,13 @@
           "cameraPermission": "FitFlex uses your camera to identify gym equipment from a photo."
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "FitFlex uses your camera to scan food barcodes and restaurant menus.",
+          "recordAudioAndroid": false
+        }
+      ],
       "expo-web-browser",
       [
         "expo-speech-recognition",

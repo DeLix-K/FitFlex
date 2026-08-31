@@ -61,6 +61,121 @@ export function buildNutritionSearchPrompt(query: string): string {
   );
 }
 
+// ─────────────────────────────────────────────
+// Instant meal capture (photo/voice): structured-line replies, same
+// labeled-line convention as buildFormGuardrailsPrompt/parseFormGuardrails,
+// so the numbers can pre-fill an editable form instead of making the user
+// retype what the AI already said. Deliberately asks for NO fiber/iron --
+// those tags are only ever shown from a real USDA/barcode match (see
+// nutrition_overhaul.sql), never estimated from a photo or a sentence.
+// ─────────────────────────────────────────────
+const INSTANT_ESTIMATE_FORMAT =
+  'Respond in EXACTLY this format, one field per line, no extra text before/after, no markdown:\n' +
+  'NAME: <short food name, under 6 words>\n' +
+  'CALORIES: <whole number>\n' +
+  'PROTEIN: <grams, whole number>\n' +
+  'CARBS: <grams, whole number>\n' +
+  'FAT: <grams, whole number>\n' +
+  'NOTE: <one short caveat if genuinely uncertain, else leave blank>\n' +
+  'If multiple foods are described, combine them into one NAME and one set of totals.';
+
+export function buildPhotoFoodEstimatePrompt(): string {
+  return (
+    'This photo shows a meal or snack. Identify what it is and estimate its calorie and macro ' +
+    "content for the portion shown. If the photo doesn't clearly show food, set NAME to " +
+    '"Unclear photo" and all numbers to 0. ' +
+    INSTANT_ESTIMATE_FORMAT
+  );
+}
+
+export function buildVoiceFoodEstimatePrompt(transcript: string): string {
+  return (
+    `A user spoke this description of what they just ate: "${transcript}". Estimate its calorie ` +
+    'and macro content for the portion implied (assume a typical/average portion if not stated). ' +
+    INSTANT_ESTIMATE_FORMAT
+  );
+}
+
+export type InstantFoodEstimate = {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  note: string;
+};
+
+export function parseInstantFoodEstimate(text: string): InstantFoodEstimate | null {
+  const get = (field: string) => {
+    const line = text.split('\n').find((l) => l.trim().toUpperCase().startsWith(`${field}:`));
+    return line ? line.slice(line.indexOf(':') + 1).trim() : '';
+  };
+  const name = get('NAME');
+  if (!name) return null;
+  const num = (field: string) => {
+    const n = Number(get(field).replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? Math.round(n) : 0;
+  };
+  return {
+    name,
+    calories: num('CALORIES'),
+    protein: num('PROTEIN'),
+    carbs: num('CARBS'),
+    fat: num('FAT'),
+    note: get('NOTE'),
+  };
+}
+
+// ─────────────────────────────────────────────
+// Menu Scanner (simplified, honest version): no restaurant-specific
+// database exists anywhere this app integrates with, so every number here
+// is a rough AI estimate from the menu's text/description alone -- same
+// honesty tier as the photo/voice estimator above, always labeled as such
+// in the UI, never presented as a real database match.
+// ─────────────────────────────────────────────
+export function buildMenuScanPrompt(remaining: { calories: number; protein: number; carbs: number; fat: number }): string {
+  return (
+    'This photo shows a restaurant menu. Read up to 8 distinct dishes from it. For each, give a rough ' +
+    'estimate of calories and macros for a typical serving, and a one-phrase verdict on how well it ' +
+    `fits these remaining daily targets: ${remaining.calories} kcal, ${remaining.protein}g protein, ` +
+    `${remaining.carbs}g carbs, ${remaining.fat}g fat left today. ` +
+    'Respond in EXACTLY this format, one dish per line, no extra text before/after, no markdown:\n' +
+    'ITEM: <dish name> | <calories> kcal | P:<protein>g C:<carbs>g F:<fat>g | FIT: <one short phrase>\n' +
+    "If the photo doesn't clearly show a menu, reply with a single line: ITEM: No menu detected | 0 kcal | " +
+    'P:0g C:0g F:0g | FIT: n/a'
+  );
+}
+
+export type MenuScanItem = { name: string; calories: number; protein: number; carbs: number; fat: number; fit: string };
+
+export function parseMenuScanItems(text: string): MenuScanItem[] {
+  const items: MenuScanItem[] = [];
+  const lineRe = /^ITEM:\s*(.+?)\s*\|\s*([\d.]+)\s*kcal\s*\|\s*P:([\d.]+)g\s*C:([\d.]+)g\s*F:([\d.]+)g\s*\|\s*FIT:\s*(.+)$/i;
+  for (const rawLine of text.split('\n')) {
+    const match = lineRe.exec(rawLine.trim());
+    if (!match) continue;
+    items.push({
+      name: match[1].trim(),
+      calories: Math.round(Number(match[2])),
+      protein: Math.round(Number(match[3])),
+      carbs: Math.round(Number(match[4])),
+      fat: Math.round(Number(match[5])),
+      fit: match[6].trim(),
+    });
+  }
+  return items;
+}
+
+export function buildFillRemainingMacrosPrompt(remaining: { calories: number; protein: number; carbs: number; fat: number }): string {
+  return (
+    `A user has ${Math.max(0, remaining.calories)} kcal, ${Math.max(0, remaining.protein)}g protein, ` +
+    `${Math.max(0, remaining.carbs)}g carbs, and ${Math.max(0, remaining.fat)}g fat left in their daily ` +
+    'targets. Suggest exactly 3 concrete meal or snack options that would realistically fit those ' +
+    'remaining numbers, each with a rough calorie/macro estimate. Keep the whole reply under 130 words, ' +
+    'plain sentences and short lists using "-" for bullets, no markdown headers or bold text.'
+  );
+}
+
 export type CoachPersonality = 'encouraging' | 'strict' | 'data_focused';
 
 export const COACH_PERSONALITIES: { value: CoachPersonality; label: string; blurb: string }[] = [

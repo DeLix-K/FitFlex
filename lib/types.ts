@@ -71,6 +71,8 @@ export type ProgramPlanEntry = {
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+export type MealSource = 'manual' | 'scan' | 'search' | 'voice' | 'barcode';
+
 export type MealLog = {
   id: string;
   user_id: string;
@@ -81,7 +83,10 @@ export type MealLog = {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
-  source: 'manual' | 'scan' | 'search';
+  fiber_g: number | null;
+  iron_mg: number | null;
+  photo_url: string | null;
+  source: MealSource;
   created_at: string;
 };
 
