@@ -31,13 +31,42 @@ export type ExerciseSetLog = {
   created_at: string;
 };
 
+export type PlanThemeKey = 'neon' | 'charcoal' | 'gold' | 'crimson' | 'azure';
+
 export type WorkoutPlan = {
   id: string;
   user_id: string;
   name: string;
   description: string | null;
+  theme_key: PlanThemeKey;
+  emoji: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ProgramScheduleMode = 'weekday' | 'flexible';
+
+export type Program = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  theme_key: PlanThemeKey;
+  emoji: string | null;
+  duration_weeks: number | null;
+  start_date: string | null;
+  deload_interval_weeks: number | null;
+  schedule_mode: ProgramScheduleMode;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProgramPlanEntry = {
+  id: string;
+  program_id: string;
+  plan_id: string;
+  order_index: number;
+  weekday: number | null;
 };
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -73,7 +102,7 @@ export type WorkoutPlanExercise = {
   sets: number | null;
   reps: number | null;
   notes: string | null;
-  exercises: Pick<Exercise, 'id' | 'name' | 'category'>;
+  exercises: Pick<Exercise, 'id' | 'name' | 'category' | 'muscle_groups' | 'equipment' | 'fatigue_tier'>;
 };
 
 export type AiHistoryKind =
@@ -105,6 +134,7 @@ export type WorkoutLog = {
   user_id: string;
   logged_date: string;
   workout_plan_id: string | null;
+  program_id: string | null;
   duration_minutes: number | null;
   created_at: string;
 };

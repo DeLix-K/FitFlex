@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -6,10 +6,11 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
 import type { Exercise } from '../lib/types';
 
 export default function ExercisePicker({
@@ -24,11 +25,13 @@ export default function ExercisePicker({
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!visible) return;
     setLoading(true);
     setError(null);
+    setSearch('');
     supabase
       .from('exercises')
       .select('*')
@@ -40,6 +43,12 @@ export default function ExercisePicker({
       });
   }, [visible]);
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return exercises;
+    return exercises.filter((e) => e.name.toLowerCase().includes(q));
+  }, [exercises, search]);
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
@@ -50,26 +59,35 @@ export default function ExercisePicker({
           </Pressable>
         </View>
 
+        <TextInput
+          style={styles.search}
+          placeholder="Search exercises..."
+          placeholderTextColor={dark.textFaint}
+          value={search}
+          onChangeText={setSearch}
+        />
+
         {loading ? (
           <View style={styles.centered}>
-            <ActivityIndicator />
+            <ActivityIndicator color={dark.accent} />
           </View>
         ) : error ? (
           <View style={styles.centered}>
             <Text style={styles.error}>{error}</Text>
           </View>
-        ) : exercises.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.empty}>No exercises available yet.</Text>
+            <Text style={styles.empty}>No exercises found.</Text>
           </View>
         ) : (
           <FlatList
-            data={exercises}
+            data={filtered}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <Pressable style={styles.row} onPress={() => onSelect(item)}>
-                <View>
+                <View style={styles.rowTextWrap}>
                   <Text style={styles.rowName}>{item.name}</Text>
                   <Text style={styles.rowCategory}>{item.category}</Text>
                 </View>
@@ -86,7 +104,7 @@ export default function ExercisePicker({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: dark.background,
     paddingTop: 60,
   },
   header: {
@@ -99,11 +117,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
+    color: dark.text,
   },
   close: {
-    color: colors.primary,
+    color: dark.accent,
     fontSize: 15,
     fontWeight: '600',
+  },
+  search: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    color: dark.text,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 15,
   },
   centered: {
     flex: 1,
@@ -112,11 +143,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   error: {
-    color: '#dc2626',
+    color: dark.danger,
     textAlign: 'center',
   },
   empty: {
-    color: '#888',
+    color: dark.textFaint,
     textAlign: 'center',
   },
   listContent: {
@@ -129,20 +160,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: dark.border,
+  },
+  rowTextWrap: {
+    flex: 1,
+    paddingRight: 12,
   },
   rowName: {
     fontSize: 16,
     fontWeight: '600',
+    color: dark.text,
   },
   rowCategory: {
     fontSize: 12,
-    color: '#888',
+    color: dark.textFaint,
     marginTop: 2,
     textTransform: 'capitalize',
   },
   add: {
-    color: colors.primary,
+    color: dark.accent,
     fontWeight: '700',
     fontSize: 14,
   },
