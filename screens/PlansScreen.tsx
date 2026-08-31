@@ -22,6 +22,7 @@ import {
   addPlanToProgram,
   applyStarterTemplate,
   assignWeekday,
+  canCreateProgram,
   computeFlexibleProgress,
   computeWeekdayProgress,
   countCompletedSessionsForProgram,
@@ -32,10 +33,12 @@ import {
   fetchPrograms,
   fetchSchedule,
   fetchWorkoutLogsInRange,
+  FREE_PROGRAM_LIMIT,
   PLAN_THEMES,
   STARTER_TEMPLATES,
   type StarterTemplate,
 } from '../lib/plans';
+import { startCheckout } from '../lib/billing';
 import { supabase } from '../lib/supabase';
 import { dark } from '../lib/theme';
 import type {
@@ -97,6 +100,10 @@ export default function PlansScreen({ session }: { session: Session }) {
   const [recalibrateOpen, setRecalibrateOpen] = useState(false);
   const [personality, setPersonality] = useState<CoachPersonality>('encouraging');
   const aiGate = useAiGate();
+  const isPremium = aiGate.isPremium === true;
+
+  const [upgradePromptOpen, setUpgradePromptOpen] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
 
   const [allExercises, setAllExercises] = useState<Exercise[] | null>(null);
   const [applyingTemplateKey, setApplyingTemplateKey] = useState<string | null>(null);
@@ -161,7 +168,21 @@ export default function PlansScreen({ session }: { session: Session }) {
     }
   };
 
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      await startCheckout();
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
   const createNewProgram = async () => {
+    if (!canCreateProgram(isPremium, programs.length)) {
+      setView({ mode: 'list' });
+      setUpgradePromptOpen(true);
+      return;
+    }
     if (!newProgramName.trim()) {
       setError('Please give your program a name.');
       return;
@@ -190,6 +211,13 @@ export default function PlansScreen({ session }: { session: Session }) {
   };
 
   const applyTemplate = async (template: StarterTemplate) => {
+    // Multi-day templates (PPL, Upper/Lower) create a real program -- single-day
+    // templates (Full Body, Bodyweight) only create a standalone plan, which
+    // stays free regardless of the program cap.
+    if (template.days.length > 1 && !canCreateProgram(isPremium, programs.length)) {
+      setUpgradePromptOpen(true);
+      return;
+    }
     setApplyingTemplateKey(template.key);
     setTemplateResult(null);
     setError(null);
@@ -274,6 +302,7 @@ export default function PlansScreen({ session }: { session: Session }) {
         planId={view.planId}
         sessionMode={view.sessionMode}
         programId={view.programId}
+        isPremium={isPremium}
         onBack={() => setView({ mode: 'list' })}
         onDeleted={() => setView({ mode: 'list' })}
         onSessionFinished={() => {}}
@@ -285,6 +314,7 @@ export default function PlansScreen({ session }: { session: Session }) {
     return (
       <ProgramDetailScreen
         programId={view.programId}
+        isPremium={isPremium}
         onBack={() => setView({ mode: 'list' })}
         onDeleted={() => setView({ mode: 'list' })}
         onOpenPlan={(planId) => setView({ mode: 'planDetail', planId })}
@@ -316,7 +346,7 @@ export default function PlansScreen({ session }: { session: Session }) {
           onChangeText={setNewDescription}
         />
 
-        <ThemeEmojiPicker themeKey={newTheme} emoji={newEmoji} onChangeTheme={setNewTheme} onChangeEmoji={setNewEmoji} />
+        <ThemeEmojiPicker themeKey={newTheme} emoji={newEmoji} isPremium={isPremium} onChangeTheme={setNewTheme} onChangeEmoji={setNewEmoji} />
 
         {error && <Text style={styles.error}>{error}</Text>}
 
@@ -386,8 +416,12 @@ export default function PlansScreen({ session }: { session: Session }) {
         <View style={styles.headerRow}>
           <Text style={styles.title}>My Plans</Text>
           <View style={styles.headerButtons}>
-            <Pressable onPress={() => setView({ mode: 'newProgram' })}>
-              <Text style={styles.newPlan}>+ Program</Text>
+            <Pressable
+              onPress={() =>
+                canCreateProgram(isPremium, programs.length) ? setView({ mode: 'newProgram' }) : setUpgradePromptOpen(true)
+              }
+            >
+              <Text style={styles.newPlan}>{canCreateProgram(isPremium, programs.length) ? '+ Program' : '🔒 Program'}</Text>
             </Pressable>
             <Pressable onPress={() => setView({ mode: 'newPlan' })}>
               <Text style={styles.newPlan}>+ Plan</Text>
@@ -473,6 +507,11 @@ export default function PlansScreen({ session }: { session: Session }) {
         {programs.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Programs</Text>
+            {!isPremium && (
+              <Text style={styles.hint}>
+                Free plan includes {FREE_PROGRAM_LIMIT} program. Upgrade to Premium for unlimited programs.
+              </Text>
+            )}
             <View style={styles.grid}>
               {programs.map((p) => {
                 const theme = PLAN_THEMES[p.theme_key];
@@ -529,23 +568,27 @@ export default function PlansScreen({ session }: { session: Session }) {
         <Text style={styles.hint}>Built from your real exercise catalog — not community content.</Text>
         {templateResult && <Text style={styles.templateResult}>{templateResult}</Text>}
         <View style={styles.grid}>
-          {STARTER_TEMPLATES.map((t) => (
-            <View key={t.key} style={styles.templateCard}>
-              <Text style={styles.templateTitle}>{t.title}</Text>
-              <Text style={styles.templateSummary}>{t.summary}</Text>
-              <Pressable
-                style={styles.templateButton}
-                onPress={() => applyTemplate(t)}
-                disabled={applyingTemplateKey === t.key}
-              >
-                {applyingTemplateKey === t.key ? (
-                  <ActivityIndicator color="#0a0a0a" />
-                ) : (
-                  <Text style={styles.templateButtonText}>Use Template</Text>
-                )}
-              </Pressable>
-            </View>
-          ))}
+          {STARTER_TEMPLATES.map((t) => {
+            const needsProgram = t.days.length > 1;
+            const locked = needsProgram && !canCreateProgram(isPremium, programs.length);
+            return (
+              <View key={t.key} style={styles.templateCard}>
+                <Text style={styles.templateTitle}>{t.title}</Text>
+                <Text style={styles.templateSummary}>{t.summary}</Text>
+                <Pressable
+                  style={styles.templateButton}
+                  onPress={() => applyTemplate(t)}
+                  disabled={applyingTemplateKey === t.key}
+                >
+                  {applyingTemplateKey === t.key ? (
+                    <ActivityIndicator color={dark.accent} />
+                  ) : (
+                    <Text style={styles.templateButtonText}>{locked ? '🔒 Premium (multi-day program)' : 'Use Template'}</Text>
+                  )}
+                </Pressable>
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
 
@@ -569,6 +612,21 @@ export default function PlansScreen({ session }: { session: Session }) {
                 <Text style={styles.pickerOptionText}>{p.name}</Text>
               </Pressable>
             ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={upgradePromptOpen} transparent animationType="fade" onRequestClose={() => setUpgradePromptOpen(false)}>
+        <Pressable style={styles.pickerBackdrop} onPress={() => setUpgradePromptOpen(false)}>
+          <View style={styles.pickerCard}>
+            <Text style={styles.pickerTitle}>🔒 Programs are a Premium feature</Text>
+            <Text style={styles.hint}>
+              Free plan includes {FREE_PROGRAM_LIMIT} program. Upgrade to Premium for unlimited programs, Smart Swap
+              All, and every card theme.
+            </Text>
+            <Pressable style={styles.createButton} onPress={handleUpgrade} disabled={upgrading}>
+              {upgrading ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.createButtonText}>Upgrade to Premium</Text>}
+            </Pressable>
           </View>
         </Pressable>
       </Modal>

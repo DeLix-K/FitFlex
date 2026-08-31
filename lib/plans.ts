@@ -39,6 +39,22 @@ export const PLAN_THEMES: Record<PlanThemeKey, { label: string; accent: string; 
 export const PLAN_EMOJI_OPTIONS = ['💪', '🔥', '⚡', '🏋️', '🏃', '🧘', '✈️', '🏆', '🎯', '⏱️'];
 
 // ─────────────────────────────────────────────
+// Monetization: Programs (the structured multi-plan rotation + real
+// progress tracking) is the premium anchor for this tab -- standalone
+// plans, starter templates, and sharing all stay free (acquisition/
+// retention/growth levers, not revenue levers). Smart Swap All and the
+// gold/crimson/azure themes are bundled Premium perks. Gated the same way
+// as everywhere else in the app: `profiles.is_premium` -> Stripe checkout,
+// never a client-only flag.
+// ─────────────────────────────────────────────
+export const FREE_PROGRAM_LIMIT = 1;
+export const FREE_THEME_KEYS: PlanThemeKey[] = ['neon', 'charcoal'];
+
+export function canCreateProgram(isPremium: boolean, currentProgramCount: number): boolean {
+  return isPremium || currentProgramCount < FREE_PROGRAM_LIMIT;
+}
+
+// ─────────────────────────────────────────────
 // Plans (unchanged data, richer selects)
 // ─────────────────────────────────────────────
 export async function fetchPlans(): Promise<WorkoutPlan[]> {

@@ -23,6 +23,7 @@ export default function PlanDetailScreen({
   onDeleted,
   sessionMode,
   programId,
+  isPremium,
   onSessionFinished,
 }: {
   planId: string;
@@ -30,6 +31,7 @@ export default function PlanDetailScreen({
   onDeleted: () => void;
   sessionMode?: boolean;
   programId?: string | null;
+  isPremium: boolean;
   onSessionFinished?: () => void;
 }) {
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
@@ -230,7 +232,7 @@ export default function PlanDetailScreen({
 
             <View style={styles.actionRow}>
               <Pressable style={styles.actionChip} onPress={() => setSwapVisible(true)}>
-                <Text style={styles.actionChipText}>🔁 Smart Swap All</Text>
+                <Text style={styles.actionChipText}>{isPremium ? '🔁' : '🔒'} Smart Swap All</Text>
               </Pressable>
               <Pressable style={styles.actionChip} onPress={() => setCustomizeOpen((v) => !v)}>
                 <Text style={styles.actionChipText}>🎨 {customizeOpen ? 'Hide Customize' : 'Customize'}</Text>
@@ -242,6 +244,7 @@ export default function PlanDetailScreen({
                 <ThemeEmojiPicker
                   themeKey={plan.theme_key}
                   emoji={plan.emoji}
+                  isPremium={isPremium}
                   onChangeTheme={changeTheme}
                   onChangeEmoji={changeEmoji}
                 />
@@ -351,6 +354,7 @@ export default function PlanDetailScreen({
         onClose={() => setSwapVisible(false)}
         items={items}
         allExercises={allExercises}
+        isPremium={isPremium}
         onApplied={fetchAll}
       />
     </View>

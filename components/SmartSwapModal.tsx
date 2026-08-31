@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Exercise, WorkoutPlanExercise } from '../lib/types';
+import { startCheckout } from '../lib/billing';
 import { smartSwapEquipment } from '../lib/plans';
 import { dark } from '../lib/theme';
 
@@ -17,16 +18,19 @@ export default function SmartSwapModal({
   onClose,
   items,
   allExercises,
+  isPremium,
   onApplied,
 }: {
   visible: boolean;
   onClose: () => void;
   items: WorkoutPlanExercise[];
   allExercises: Exercise[];
+  isPremium: boolean;
   onApplied: () => void;
 }) {
   const [target, setTarget] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [result, setResult] = useState<{ swapped: { from: string; to: string }[]; unchanged: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +60,15 @@ export default function SmartSwapModal({
     }
   };
 
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      await startCheckout();
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={styles.backdrop}>
@@ -68,7 +81,28 @@ export default function SmartSwapModal({
           </View>
 
           <ScrollView>
-            {!result ? (
+            {!isPremium ? (
+              <>
+                <Text style={styles.subtitle}>
+                  Swap every exercise in this plan to use one equipment type, where a real substitute exists in the
+                  catalog. Exercises that already match, or have no substitute, are left as-is.
+                </Text>
+                <View style={styles.chipRow}>
+                  {TARGETS.map((t) => (
+                    <View key={t.key} style={styles.chip}>
+                      <Text style={styles.chipText}>🔒 {t.label}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Pressable style={styles.submitButton} onPress={handleUpgrade} disabled={upgrading}>
+                  {upgrading ? (
+                    <ActivityIndicator color="#0a0a0a" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>🔒 Unlock with Premium</Text>
+                  )}
+                </Pressable>
+              </>
+            ) : !result ? (
               <>
                 <Text style={styles.subtitle}>
                   Swap every exercise in this plan to use one equipment type, where a real substitute exists in the

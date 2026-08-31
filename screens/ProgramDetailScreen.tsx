@@ -53,12 +53,14 @@ export default function ProgramDetailScreen({
   onDeleted,
   onOpenPlan,
   onStartSession,
+  isPremium,
 }: {
   programId: string;
   onBack: () => void;
   onDeleted: () => void;
   onOpenPlan: (planId: string) => void;
   onStartSession: (planId: string, programId: string) => void;
+  isPremium: boolean;
 }) {
   const [program, setProgram] = useState<Program | null>(null);
   const [entries, setEntries] = useState<ProgramPlanEntry[]>([]);
@@ -299,6 +301,7 @@ export default function ProgramDetailScreen({
                 <ThemeEmojiPicker
                   themeKey={program.theme_key}
                   emoji={program.emoji}
+                  isPremium={isPremium}
                   onChangeTheme={async (themeKey) => {
                     setProgram({ ...program, theme_key: themeKey });
                     await updateProgram(programId, { themeKey });
