@@ -2,7 +2,7 @@ import { getMyStats, fetchLoggedDates } from './streaks';
 import { fetchSleepHistory } from './sleep';
 import { fetchMoodHistory } from './wellness';
 import { supabase } from './supabase';
-import type { CoachPersonality, DailyBriefingData, PostWorkoutInsightData } from './claude';
+import type { ChatMessage, CoachPersonality, DailyBriefingData, PostWorkoutInsightData } from './claude';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -151,6 +151,35 @@ export async function updateCoachPersonality(personality: CoachPersonality): Pro
     .eq('id', userId);
 
   if (error) throw new Error(error.message);
+}
+
+// Session continuity: reloads the tail of the real coach_chat transcript so
+// reopening the Coach tab continues the conversation instead of resetting
+// to blank. Deliberately a small window (10 exchanges), not the full
+// history -- this is UI continuity, not the durable memory summary (see
+// lib/coachMemory.ts), which is what actually shapes future advice.
+export async function fetchRecentCoachMessages(limitExchanges = 10): Promise<ChatMessage[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('ai_history')
+    .select('query, result')
+    .eq('user_id', userId)
+    .eq('kind', 'coach_chat')
+    .order('created_at', { ascending: false })
+    .limit(limitExchanges);
+
+  if (error) throw new Error(error.message);
+
+  const rows = ((data ?? []) as { query: string | null; result: string }[]).reverse();
+  const messages: ChatMessage[] = [];
+  for (const row of rows) {
+    if (row.query) messages.push({ role: 'user', content: row.query });
+    messages.push({ role: 'assistant', content: row.result });
+  }
+  return messages;
 }
 
 // Cache-per-day: reuses today's ai_history entry for the given kind instead

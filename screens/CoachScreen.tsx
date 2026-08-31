@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import AiUsageIndicator from '../components/AiUsageIndicator';
+import CoachMemoryModal from '../components/CoachMemoryModal';
 import DailyBriefingCard from '../components/DailyBriefingCard';
 import PostWorkoutInsightCard from '../components/PostWorkoutInsightCard';
 import SessionRecalibrationModal from '../components/SessionRecalibrationModal';
@@ -24,7 +25,13 @@ import {
   type CoachPersonality,
   type DailyBriefingData,
 } from '../lib/claude';
-import { fetchCoachPersonality, fetchDailyBriefingData, updateCoachPersonality } from '../lib/coachInsights';
+import { fetchCoachMemory, regenerateCoachMemoryIfStale } from '../lib/coachMemory';
+import {
+  fetchCoachPersonality,
+  fetchDailyBriefingData,
+  fetchRecentCoachMessages,
+  updateCoachPersonality,
+} from '../lib/coachInsights';
 import { getMyStats } from '../lib/streaks';
 import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
@@ -63,10 +70,13 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
   const [displayName, setDisplayName] = useState('there');
   const [personality, setPersonality] = useState<CoachPersonality>('encouraging');
   const [dailyData, setDailyData] = useState<DailyBriefingData | null>(null);
+  const [coachMemory, setCoachMemory] = useState<string | null>(null);
+  const [memoryModalOpen, setMemoryModalOpen] = useState(false);
   const [recalibrateOpen, setRecalibrateOpen] = useState(false);
   const [voiceRepliesOn, setVoiceRepliesOn] = useState(false);
   const aiGate = useAiGate();
   const scrollRef = useRef<ScrollView>(null);
+  const memoryCheckedRef = useRef(false);
 
   useEffect(() => {
     supabase
@@ -102,7 +112,31 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
     fetchDailyBriefingData()
       .then(setDailyData)
       .catch(() => {});
+
+    // Cross-session memory: the durable summary (shapes future advice) and
+    // the recent-transcript tail (continues the visible thread instead of
+    // resetting to blank). Both non-critical -- the chat works with neither.
+    fetchCoachMemory()
+      .then((r) => setCoachMemory(r.memory))
+      .catch(() => {});
+    fetchRecentCoachMessages()
+      .then((msgs) => {
+        if (msgs.length > 0) setMessages(msgs);
+      })
+      .catch(() => {});
   }, []);
+
+  // Background memory upkeep: at most once per mount, and only once the AI
+  // gate is loaded and the user actually has quota left -- regeneration is
+  // a real Claude call, so it shouldn't spend a free user's daily budget
+  // silently if they're already out.
+  useEffect(() => {
+    if (!aiGate.loaded || !aiGate.canUse || memoryCheckedRef.current) return;
+    memoryCheckedRef.current = true;
+    regenerateCoachMemoryIfStale()
+      .then((mem) => setCoachMemory(mem))
+      .catch(() => {});
+  }, [aiGate.loaded, aiGate.canUse]);
 
   const handlePersonalityChange = async (p: CoachPersonality) => {
     setPersonality(p);
@@ -129,7 +163,10 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
     setSending(true);
 
     try {
-      const reply = await askClaudeChat(nextMessages, buildCoachSystemPrompt(plans, personality, dailyData));
+      const reply = await askClaudeChat(
+        nextMessages,
+        buildCoachSystemPrompt(plans, personality, dailyData, coachMemory)
+      );
       setMessages([...nextMessages, { role: 'assistant', content: reply }]);
       saveHistoryEntry('coach_chat', reply, trimmed);
       aiGate.refresh();
@@ -200,6 +237,10 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
             >
               {voiceRepliesOn ? '🔊 Speaks Replies' : '🔈 Speak Replies'}
             </Text>
+          </Pressable>
+
+          <Pressable style={styles.personalityChip} onPress={() => setMemoryModalOpen(true)}>
+            <Text style={styles.personalityChipText}>🧠 Memory</Text>
           </Pressable>
         </View>
       </View>
@@ -303,6 +344,13 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
         personality={personality}
         canUse={aiGate.canUse}
         onUsed={aiGate.refresh}
+      />
+
+      <CoachMemoryModal
+        visible={memoryModalOpen}
+        onClose={() => setMemoryModalOpen(false)}
+        memory={coachMemory}
+        onCleared={() => setCoachMemory(null)}
       />
     </KeyboardAvoidingView>
   );

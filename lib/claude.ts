@@ -229,7 +229,8 @@ function buildDailyContextFacts(data: DailyBriefingData): string {
 export function buildCoachSystemPrompt(
   plans: { name: string; exerciseNames: string[] }[],
   personality: CoachPersonality = 'encouraging',
-  dailyData?: DailyBriefingData | null
+  dailyData?: DailyBriefingData | null,
+  coachMemory?: string | null
 ): string {
   const planSummary =
     plans.length === 0
@@ -247,6 +248,12 @@ export function buildCoachSystemPrompt(
       `data doesn't support: ${buildDailyContextFacts(dailyData)}`
     : '';
 
+  const memoryBlock = coachMemory
+    ? `\n\nWhat you remember about this user from past conversations — use it naturally when relevant (e.g. ` +
+      `avoiding an exercise they've said aggravates an injury, or referencing a stated goal), but never force ` +
+      `it into every reply, and never invent anything beyond what's written here: ${coachMemory}`
+    : '';
+
   return (
     'You are the FitFlex AI Coach, a knowledgeable fitness coach inside a workout app. ' +
     PERSONALITY_TONE[personality] + '\n\n' +
@@ -257,7 +264,36 @@ export function buildCoachSystemPrompt(
     'Keep replies conversational and concise (usually under 120 words unless the user asks for detail), ' +
     'plain sentences, no markdown formatting. You are not a doctor — for medical concerns, suggest they see one.\n\n' +
     `Their saved workout plans:\n${planSummary}` +
-    dailyContextBlock
+    dailyContextBlock +
+    memoryBlock
+  );
+}
+
+// Folds recent real coach_chat exchanges into a compact, durable summary
+// (not a transcript replay) -- called from lib/coachMemory.ts roughly once
+// every ~20 exchanges, never on every message.
+export function buildCoachMemoryUpdatePrompt(
+  existingMemory: string | null,
+  recentExchanges: { query: string; result: string }[]
+): string {
+  const existingBlock = existingMemory
+    ? `Current memory notes about this user:\n${existingMemory}`
+    : 'No memory notes exist yet for this user.';
+
+  const transcript = recentExchanges.map((e) => `User: ${e.query}\nCoach: ${e.result}`).join('\n\n');
+
+  return (
+    'You maintain a compact, durable memory profile for the FitFlex AI Coach about one specific user, built ' +
+    'from their real chat history below. Update the memory notes: keep or add genuinely durable facts ' +
+    "(injuries or physical limitations they've mentioned, stated preferences like preferred training time or " +
+    'disliked exercises, goals, equipment access, recurring patterns across multiple conversations), and drop ' +
+    "anything that was clearly one-off or no longer relevant. Never invent a fact the conversation doesn't " +
+    "actually support — if nothing durable has come up, say so plainly instead of padding with generic advice.\n\n" +
+    `${existingBlock}\n\nRecent conversation to fold in:\n${transcript}\n\n` +
+    'Reply with ONLY the updated memory notes as a short plain-text list of facts (3-8 short lines using "-" ' +
+    'for bullets), under 120 words total, written in third person ("Prefers morning workouts", not "I prefer..."). ' +
+    'No markdown headers, no preamble, no explanation of what changed — just the final notes themselves. If ' +
+    "nothing durable is discernible, reply with exactly: No durable facts yet."
   );
 }
 
