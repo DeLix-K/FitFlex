@@ -196,33 +196,6 @@ const PERSONALITY_TONE: Record<CoachPersonality, string> = {
     'each recommendation, and keep emotional language to a minimum.',
 };
 
-export function buildCoachSystemPrompt(
-  plans: { name: string; exerciseNames: string[] }[],
-  personality: CoachPersonality = 'encouraging'
-): string {
-  const planSummary =
-    plans.length === 0
-      ? "This user hasn't saved any workout plans yet."
-      : plans
-          .map(
-            (p) =>
-              `- "${p.name}"${p.exerciseNames.length ? `: ${p.exerciseNames.join(', ')}` : ' (no exercises added yet)'}`
-          )
-          .join('\n');
-
-  return (
-    'You are the FitFlex AI Coach, a knowledgeable fitness coach inside a workout app. ' +
-    PERSONALITY_TONE[personality] + '\n\n' +
-    "You can see the user's saved workout plans below and should refer to them naturally when relevant " +
-    "(e.g. suggesting which saved plan to do today, or noting they haven't built one yet). " +
-    "You answer fitness, exercise, and general wellness questions, suggest workouts, and adjust advice for " +
-    'things like soreness, tiredness, or limited time when the user mentions them. ' +
-    'Keep replies conversational and concise (usually under 120 words unless the user asks for detail), ' +
-    'plain sentences, no markdown formatting. You are not a doctor — for medical concerns, suggest they see one.\n\n' +
-    `Their saved workout plans:\n${planSummary}`
-  );
-}
-
 export type DailyBriefingData = {
   sleepHours: number | null;
   sleepScore: number | null;
@@ -234,11 +207,11 @@ export type DailyBriefingData = {
   hasLoggedToday: boolean;
 };
 
-export function buildDailyBriefingPrompt(
-  data: DailyBriefingData,
-  personality: CoachPersonality = 'encouraging'
-): string {
-  const facts = [
+// Shared with buildCoachSystemPrompt so the live chat is grounded in the same
+// real sleep/mood/streak facts as the Daily Briefing card, instead of the
+// two features seeing different slices of the same user's data.
+function buildDailyContextFacts(data: DailyBriefingData): string {
+  return [
     data.sleepHours != null
       ? `Slept ${data.sleepHours.toFixed(1)}h last night${data.sleepScore != null ? ` (sleep score ${data.sleepScore}/100)` : ''}.`
       : 'No sleep logged for last night.',
@@ -251,6 +224,48 @@ export function buildDailyBriefingPrompt(
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+export function buildCoachSystemPrompt(
+  plans: { name: string; exerciseNames: string[] }[],
+  personality: CoachPersonality = 'encouraging',
+  dailyData?: DailyBriefingData | null
+): string {
+  const planSummary =
+    plans.length === 0
+      ? "This user hasn't saved any workout plans yet."
+      : plans
+          .map(
+            (p) =>
+              `- "${p.name}"${p.exerciseNames.length ? `: ${p.exerciseNames.join(', ')}` : ' (no exercises added yet)'}`
+          )
+          .join('\n');
+
+  const dailyContextBlock = dailyData
+    ? `\n\nTheir real data for today — use it naturally when relevant (e.g. suggesting lighter volume on low ` +
+      `sleep, or noting a strong streak), but never force it into every reply, and never invent numbers this ` +
+      `data doesn't support: ${buildDailyContextFacts(dailyData)}`
+    : '';
+
+  return (
+    'You are the FitFlex AI Coach, a knowledgeable fitness coach inside a workout app. ' +
+    PERSONALITY_TONE[personality] + '\n\n' +
+    "You can see the user's saved workout plans below and should refer to them naturally when relevant " +
+    "(e.g. suggesting which saved plan to do today, or noting they haven't built one yet). " +
+    "You answer fitness, exercise, and general wellness questions, suggest workouts, and adjust advice for " +
+    'things like soreness, tiredness, or limited time when the user mentions them. ' +
+    'Keep replies conversational and concise (usually under 120 words unless the user asks for detail), ' +
+    'plain sentences, no markdown formatting. You are not a doctor — for medical concerns, suggest they see one.\n\n' +
+    `Their saved workout plans:\n${planSummary}` +
+    dailyContextBlock
+  );
+}
+
+export function buildDailyBriefingPrompt(
+  data: DailyBriefingData,
+  personality: CoachPersonality = 'encouraging'
+): string {
+  const facts = buildDailyContextFacts(data);
 
   return (
     'You are the FitFlex AI Coach writing a short "Daily Briefing" for a user, using ONLY the real data given ' +

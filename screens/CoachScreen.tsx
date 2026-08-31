@@ -22,8 +22,9 @@ import {
   COACH_PERSONALITIES,
   type ChatMessage,
   type CoachPersonality,
+  type DailyBriefingData,
 } from '../lib/claude';
-import { fetchCoachPersonality, updateCoachPersonality } from '../lib/coachInsights';
+import { fetchCoachPersonality, fetchDailyBriefingData, updateCoachPersonality } from '../lib/coachInsights';
 import { getMyStats } from '../lib/streaks';
 import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
@@ -61,6 +62,7 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
   const [plans, setPlans] = useState<{ name: string; exerciseNames: string[] }[]>([]);
   const [displayName, setDisplayName] = useState('there');
   const [personality, setPersonality] = useState<CoachPersonality>('encouraging');
+  const [dailyData, setDailyData] = useState<DailyBriefingData | null>(null);
   const [recalibrateOpen, setRecalibrateOpen] = useState(false);
   const [voiceRepliesOn, setVoiceRepliesOn] = useState(false);
   const aiGate = useAiGate();
@@ -92,6 +94,14 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
     fetchCoachPersonality()
       .then(setPersonality)
       .catch(() => {});
+
+    // Same real sleep/mood/streak/plan data the Daily Briefing card uses --
+    // grounds the live chat in it too instead of the two features seeing
+    // different slices of the same user. Non-critical: the chat still works
+    // without it, just without that context.
+    fetchDailyBriefingData()
+      .then(setDailyData)
+      .catch(() => {});
   }, []);
 
   const handlePersonalityChange = async (p: CoachPersonality) => {
@@ -119,7 +129,7 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
     setSending(true);
 
     try {
-      const reply = await askClaudeChat(nextMessages, buildCoachSystemPrompt(plans, personality));
+      const reply = await askClaudeChat(nextMessages, buildCoachSystemPrompt(plans, personality, dailyData));
       setMessages([...nextMessages, { role: 'assistant', content: reply }]);
       saveHistoryEntry('coach_chat', reply, trimmed);
       aiGate.refresh();
