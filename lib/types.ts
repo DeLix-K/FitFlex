@@ -315,7 +315,39 @@ export type TrainerTimeSlot = {
   status: SlotStatus;
   booked_by_user_id: string | null;
   video_call_link: string | null;
+  consumed_credit_id: string | null;
   created_at: string;
+};
+
+export type TrainerSessionPackage = {
+  id: string;
+  trainer_user_id: string;
+  trainer_profile_id: string;
+  name: string;
+  session_count: number;
+  price_cents: number;
+  active: boolean;
+  created_at: string;
+};
+
+export type TrainerSessionCreditStatus = 'pending' | 'paid';
+
+export type TrainerSessionCredit = {
+  id: string;
+  client_user_id: string;
+  trainer_user_id: string;
+  package_id: string;
+  sessions_purchased: number;
+  sessions_used: number;
+  stripe_checkout_session_id: string | null;
+  status: TrainerSessionCreditStatus;
+  created_at: string;
+};
+
+export type TrainerSessionCreditBalance = {
+  trainer_user_id: string;
+  client_user_id: string;
+  sessions_remaining: number;
 };
 
 export type OpenTrainerSlot = {

@@ -180,6 +180,20 @@ Deno.serve(async (req) => {
           break;
         }
 
+        if (session.metadata?.fitflex_order_type === 'session_package') {
+          const { data, error, count } = await adminClient
+            .from('trainer_session_credits')
+            .update({ status: 'paid' })
+            .eq('stripe_checkout_session_id', session.id)
+            .eq('status', 'pending')
+            .select();
+          console.log(
+            'session package credits marked paid',
+            JSON.stringify({ sessionId: session.id, error, count, rows: data?.length })
+          );
+          break;
+        }
+
         if (session.metadata?.fitflex_order_type === 'course') {
           const { data, error, count } = await adminClient
             .from('course_enrollments')

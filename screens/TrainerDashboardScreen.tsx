@@ -11,6 +11,7 @@ import {
 import AudioPlayerButton from '../components/AudioPlayerButton';
 import AvailabilityManager from '../components/AvailabilityManager';
 import ExercisePicker from '../components/ExercisePicker';
+import PackageManager from '../components/PackageManager';
 import RespondToFormReviewModal from '../components/RespondToFormReviewModal';
 import TrainerChatModal from '../components/TrainerChatModal';
 import TrainerProfileForm from '../components/TrainerProfileForm';
@@ -320,6 +321,9 @@ export default function TrainerDashboardScreen() {
                 <Text style={styles.payoutTextEnabled}>✓ Payouts enabled</Text>
               </View>
             )}
+
+            <Text style={styles.sectionTitle}>Session Packages</Text>
+            <PackageManager />
 
             <Text style={styles.sectionTitle}>Availability</Text>
             <AvailabilityManager />

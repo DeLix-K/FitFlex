@@ -5,9 +5,9 @@ import StarRating from '../components/StarRating';
 import TrainerChatModal from '../components/TrainerChatModal';
 import TrainerVideoPlayer from '../components/TrainerVideoPlayer';
 import { FORMAT_OPTIONS } from '../lib/trainerMatchmaker';
-import { bookSlot, fetchOpenSlots, fetchTrainerReviews } from '../lib/trainers';
+import { bookSlot, buyPackage, fetchMySessionCredits, fetchOpenSlots, fetchTrainerPackages, fetchTrainerReviews } from '../lib/trainers';
 import { dark } from '../lib/theme';
-import type { OpenTrainerSlot, TrainerProfile, TrainerRating, TrainerReview } from '../lib/types';
+import type { OpenTrainerSlot, TrainerProfile, TrainerRating, TrainerReview, TrainerSessionPackage } from '../lib/types';
 
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -41,8 +41,11 @@ export default function TrainerProfileScreen({
 }) {
   const [reviews, setReviews] = useState<TrainerReview[]>([]);
   const [slots, setSlots] = useState<OpenTrainerSlot[]>([]);
+  const [packages, setPackages] = useState<TrainerSessionPackage[]>([]);
+  const [sessionsRemaining, setSessionsRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [buyingPackageId, setBuyingPackageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [formCheckOpen, setFormCheckOpen] = useState(false);
@@ -50,9 +53,16 @@ export default function TrainerProfileScreen({
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [reviewData, slotData] = await Promise.all([fetchTrainerReviews(trainer.user_id), fetchOpenSlots(trainer.user_id)]);
+      const [reviewData, slotData, packageData, creditBalances] = await Promise.all([
+        fetchTrainerReviews(trainer.user_id),
+        fetchOpenSlots(trainer.user_id),
+        fetchTrainerPackages(trainer.user_id),
+        fetchMySessionCredits(),
+      ]);
       setReviews(reviewData);
       setSlots(slotData);
+      setPackages(packageData);
+      setSessionsRemaining(creditBalances.find((b) => b.trainer_user_id === trainer.user_id)?.sessions_remaining ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -75,6 +85,18 @@ export default function TrainerProfileScreen({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBookingId(null);
+    }
+  };
+
+  const handleBuyPackage = async (pkg: TrainerSessionPackage) => {
+    setBuyingPackageId(pkg.id);
+    setError(null);
+    try {
+      await buyPackage(pkg.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBuyingPackageId(null);
     }
   };
 
@@ -166,6 +188,32 @@ export default function TrainerProfileScreen({
               </>
             )}
 
+            {packages.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Session Packages</Text>
+                {sessionsRemaining > 0 && (
+                  <Text style={styles.creditsBadge}>✓ You have {sessionsRemaining} session{sessionsRemaining === 1 ? '' : 's'} left with this trainer</Text>
+                )}
+                {packages.map((pkg) => (
+                  <View key={pkg.id} style={styles.packageRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.packageName}>{pkg.name}</Text>
+                      <Text style={styles.packageDetail}>
+                        {pkg.session_count} sessions · {formatPrice(pkg.price_cents)}
+                      </Text>
+                    </View>
+                    <Pressable style={styles.packageBuyButton} onPress={() => handleBuyPackage(pkg)} disabled={buyingPackageId === pkg.id}>
+                      {buyingPackageId === pkg.id ? (
+                        <ActivityIndicator color="#0a0a0a" size="small" />
+                      ) : (
+                        <Text style={styles.packageBuyButtonText}>Buy</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            )}
+
             <Text style={styles.sectionTitle}>Available Session Times</Text>
             {sessionSlots.length === 0 ? (
               <Text style={styles.empty}>No open session slots right now — message the trainer directly.</Text>
@@ -248,6 +296,15 @@ const styles = StyleSheet.create({
   },
   slotTime: { color: dark.text, fontSize: 13, fontWeight: '600' },
   slotBookText: { color: dark.accent, fontSize: 12, fontWeight: '700' },
+  creditsBadge: { color: dark.accent, fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  packageRow: {
+    flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: dark.border,
+    backgroundColor: dark.surface, borderRadius: 10, padding: 12, marginTop: 8,
+  },
+  packageName: { color: dark.text, fontSize: 14, fontWeight: '700' },
+  packageDetail: { color: dark.textMuted, fontSize: 12, marginTop: 2 },
+  packageBuyButton: { backgroundColor: dark.accent, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 18 },
+  packageBuyButtonText: { color: '#0a0a0a', fontWeight: '700', fontSize: 12 },
   reviewRow: { borderWidth: 1, borderColor: dark.border, backgroundColor: dark.surface, borderRadius: 10, padding: 12, marginTop: 8 },
   reviewStars: { color: '#fbbf24', fontSize: 14, marginBottom: 4 },
   reviewComment: { color: dark.textMuted, fontSize: 13, lineHeight: 18 },

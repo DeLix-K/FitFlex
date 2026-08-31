@@ -6,6 +6,7 @@ import type {
   TrainerFormReview,
   TrainerOrderView,
   TrainerProfile,
+  TrainerSessionPackage,
   TrainerTimeSlot,
   TrainingFormat,
 } from './types';
@@ -159,6 +160,49 @@ export async function fetchMySlots(): Promise<{ slots: TrainerTimeSlot[]; booked
 
 export async function deleteSlot(slotId: string): Promise<void> {
   const { error } = await supabase.from('trainer_time_slots').delete().eq('id', slotId);
+  if (error) throw new Error(error.message);
+}
+
+// ─────────────────────────────────────────────
+// Trainer-side session package management. Direct table writes work here
+// (unlike trainer_profiles) -- trainer_session_packages' RLS already lets a
+// trainer manage rows where trainer_user_id = auth.uid(), no admin-only
+// lockdown, no Edge Function needed.
+// ─────────────────────────────────────────────
+export async function fetchMyPackages(): Promise<TrainerSessionPackage[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('trainer_session_packages')
+    .select('*')
+    .eq('trainer_user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function createPackage(params: { name: string; sessionCount: number; priceCents: number }): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+
+  const profile = await fetchMyTrainerProfile();
+  if (!profile) throw new Error('Create your trainer profile first.');
+
+  const { error } = await supabase.from('trainer_session_packages').insert({
+    trainer_user_id: userId,
+    trainer_profile_id: profile.id,
+    name: params.name,
+    session_count: params.sessionCount,
+    price_cents: params.priceCents,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function togglePackageActive(packageId: string, active: boolean): Promise<void> {
+  const { error } = await supabase.from('trainer_session_packages').update({ active }).eq('id', packageId);
   if (error) throw new Error(error.message);
 }
 

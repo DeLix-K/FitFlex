@@ -7,6 +7,8 @@ import type {
   TrainerProfile,
   TrainerRating,
   TrainerReview,
+  TrainerSessionCreditBalance,
+  TrainerSessionPackage,
   TrainerTimeSlot,
 } from './types';
 
@@ -97,6 +99,48 @@ export async function fetchMyReviewedOrderIds(): Promise<Set<string>> {
   const { data, error } = await supabase.from('trainer_reviews').select('order_id').eq('client_user_id', userId);
   if (error) throw new Error(error.message);
   return new Set((data ?? []).map((r: { order_id: string }) => r.order_id));
+}
+
+// ─────────────────────────────────────────────
+// Session Packages: real bundle pricing on the same Stripe Connect setup
+// as the custom-plan purchase above -- see trainer_session_packages.sql.
+// ─────────────────────────────────────────────
+export async function fetchTrainerPackages(trainerUserId: string): Promise<TrainerSessionPackage[]> {
+  const { data, error } = await supabase
+    .from('trainer_session_packages')
+    .select('*')
+    .eq('trainer_user_id', trainerUserId)
+    .eq('active', true)
+    .order('price_cents', { ascending: true });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function buyPackage(packageId: string): Promise<void> {
+  const returnUrl = getCheckoutRedirectUrl();
+
+  const { url } = await invoke<{ url?: string }>('create-package-checkout', {
+    packageId,
+    successUrl: returnUrl,
+    cancelUrl: returnUrl,
+  });
+
+  if (!url) throw new Error('Stripe did not return a checkout URL.');
+
+  await openCheckoutUrl(url);
+}
+
+export async function fetchMySessionCredits(): Promise<TrainerSessionCreditBalance[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('trainer_session_credit_balance')
+    .select('*')
+    .eq('client_user_id', userId);
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 export async function submitTrainerReview(orderId: string, rating: number, comment: string): Promise<void> {
