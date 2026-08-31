@@ -46,12 +46,35 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { displayName, bio, specialty, priceCents } = await req.json().catch(() => ({}));
+    const {
+      displayName,
+      bio,
+      specialty,
+      priceCents,
+      introVideoUrl,
+      trainingFormat,
+      locationText,
+      defaultVideoCallLink,
+      coachingStyle,
+    } = await req.json().catch(() => ({}));
 
     const trimmedName = typeof displayName === 'string' ? displayName.trim() : '';
     const trimmedBio = typeof bio === 'string' ? bio.trim() : '';
     const trimmedSpecialty = typeof specialty === 'string' ? specialty.trim() : '';
     const price = Number(priceCents);
+
+    const ALLOWED_FORMATS = ['in_person', 'virtual', 'online'];
+    const trimmedFormat = Array.isArray(trainingFormat)
+      ? trainingFormat.filter((f) => ALLOWED_FORMATS.includes(f)).slice(0, 3)
+      : [];
+    const trimmedLocation = typeof locationText === 'string' ? locationText.trim().slice(0, 120) : '';
+    const trimmedVideoUrl = typeof introVideoUrl === 'string' && introVideoUrl.startsWith('https://') ? introVideoUrl : null;
+    const trimmedCallLink =
+      typeof defaultVideoCallLink === 'string' && defaultVideoCallLink.trim().length <= 300
+        ? defaultVideoCallLink.trim() || null
+        : null;
+    const ALLOWED_STYLES = ['high_energy', 'technical', 'empathetic'];
+    const trimmedStyle = ALLOWED_STYLES.includes(coachingStyle) ? coachingStyle : null;
 
     if (!trimmedName || trimmedName.length > 80) {
       return new Response(JSON.stringify({ error: 'Enter a display name (up to 80 characters).' }), {
@@ -115,6 +138,11 @@ Deno.serve(async (req) => {
           bio: trimmedBio,
           specialty: trimmedSpecialty,
           price_cents: price,
+          intro_video_url: trimmedVideoUrl,
+          training_format: trimmedFormat,
+          location_text: trimmedLocation,
+          default_video_call_link: trimmedCallLink,
+          coaching_style: trimmedStyle,
         },
         { onConflict: 'user_id' }
       );

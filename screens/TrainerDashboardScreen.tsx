@@ -8,11 +8,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AudioPlayerButton from '../components/AudioPlayerButton';
+import AvailabilityManager from '../components/AvailabilityManager';
 import ExercisePicker from '../components/ExercisePicker';
+import RespondToFormReviewModal from '../components/RespondToFormReviewModal';
 import TrainerChatModal from '../components/TrainerChatModal';
 import TrainerProfileForm from '../components/TrainerProfileForm';
+import TrainerVideoPlayer from '../components/TrainerVideoPlayer';
 import {
   deliverPlan,
+  fetchMyFormReviewRequests,
   fetchMyOrdersAsTrainer,
   fetchMyTrainerProfile,
   startTrainerOnboarding,
@@ -20,7 +25,7 @@ import {
 import { fetchMyClientThreads, type ClientThread } from '../lib/trainerMessages';
 import { supabase } from '../lib/supabase';
 import { dark } from '../lib/theme';
-import type { Exercise, TrainerOrderView, TrainerProfile } from '../lib/types';
+import type { Exercise, TrainerFormReview, TrainerOrderView, TrainerProfile } from '../lib/types';
 
 type DraftItem = { exerciseId: string; name: string; sets: string; reps: string; notes: string };
 type Mode = { mode: 'list' } | { mode: 'build'; order: TrainerOrderView } | { mode: 'edit' };
@@ -194,6 +199,8 @@ export default function TrainerDashboardScreen() {
   const [orders, setOrders] = useState<TrainerOrderView[]>([]);
   const [threads, setThreads] = useState<ClientThread[]>([]);
   const [chatClient, setChatClient] = useState<ClientThread | null>(null);
+  const [formReviews, setFormReviews] = useState<TrainerFormReview[]>([]);
+  const [respondTarget, setRespondTarget] = useState<TrainerFormReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [onboarding, setOnboarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,14 +208,16 @@ export default function TrainerDashboardScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [trainerProfile, myOrders, myThreads] = await Promise.all([
+      const [trainerProfile, myOrders, myThreads, myFormReviews] = await Promise.all([
         fetchMyTrainerProfile(),
         fetchMyOrdersAsTrainer(),
         fetchMyClientThreads(),
+        fetchMyFormReviewRequests(),
       ]);
       setProfile(trainerProfile);
       setOrders(myOrders);
       setThreads(myThreads);
+      setFormReviews(myFormReviews);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -312,6 +321,33 @@ export default function TrainerDashboardScreen() {
               </View>
             )}
 
+            <Text style={styles.sectionTitle}>Availability</Text>
+            <AvailabilityManager />
+
+            <Text style={styles.sectionTitle}>
+              Form Check Requests {formReviews.filter((f) => f.status === 'pending').length > 0 ? `(${formReviews.filter((f) => f.status === 'pending').length} pending)` : ''}
+            </Text>
+            {formReviews.length === 0 ? (
+              <Text style={styles.empty}>No form check requests yet.</Text>
+            ) : (
+              formReviews.map((fr) => (
+                <View key={fr.id} style={styles.formReviewCard}>
+                  <TrainerVideoPlayer uri={fr.video_url} aspectRatio={9 / 16} autoplay={false} />
+                  <Text style={styles.formReviewName}>{fr.exercise_name}</Text>
+                  {fr.status === 'pending' ? (
+                    <Pressable style={styles.respondButton} onPress={() => setRespondTarget(fr)}>
+                      <Text style={styles.respondButtonText}>Respond with Feedback</Text>
+                    </Pressable>
+                  ) : (
+                    <>
+                      {fr.comment ? <Text style={styles.formReviewComment}>{fr.comment}</Text> : null}
+                      {fr.voice_note_url && <AudioPlayerButton uri={fr.voice_note_url} />}
+                    </>
+                  )}
+                </View>
+              ))
+            )}
+
             <Text style={styles.sectionTitle}>
               Messages {threads.length > 0 ? `(${threads.length})` : ''}
             </Text>
@@ -364,6 +400,13 @@ export default function TrainerDashboardScreen() {
             </>
           ) : null
         }
+      />
+
+      <RespondToFormReviewModal
+        visible={!!respondTarget}
+        request={respondTarget}
+        onClose={() => setRespondTarget(null)}
+        onResponded={load}
       />
 
       {chatClient && (
@@ -502,6 +545,38 @@ const styles = StyleSheet.create({
   threadWhen: {
     fontSize: 11,
     color: dark.textFaint,
+  },
+  formReviewCard: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  formReviewName: {
+    color: dark.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  formReviewComment: {
+    color: dark.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  respondButton: {
+    backgroundColor: dark.accent,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  respondButtonText: {
+    color: '#0a0a0a',
+    fontWeight: '700',
+    fontSize: 12,
   },
   orderCard: {
     flexDirection: 'row',

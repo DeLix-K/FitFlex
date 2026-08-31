@@ -282,6 +282,8 @@ export type TrainerMessage = {
   created_at: string;
 };
 
+export type TrainingFormat = 'in_person' | 'virtual' | 'online';
+
 export type TrainerProfile = {
   id: string;
   user_id: string;
@@ -291,7 +293,68 @@ export type TrainerProfile = {
   price_cents: number;
   stripe_account_id: string | null;
   payouts_enabled: boolean;
+  intro_video_url: string | null;
+  training_format: TrainingFormat[];
+  location_text: string;
+  default_video_call_link: string | null;
+  coaching_style: CoachingStyle | null;
   created_at: string;
+};
+
+export type CoachingStyle = 'high_energy' | 'technical' | 'empathetic';
+
+export type SlotType = 'intro' | 'session';
+export type SlotStatus = 'open' | 'booked' | 'cancelled';
+
+export type TrainerTimeSlot = {
+  id: string;
+  trainer_user_id: string;
+  starts_at: string;
+  duration_minutes: number;
+  slot_type: SlotType;
+  status: SlotStatus;
+  booked_by_user_id: string | null;
+  video_call_link: string | null;
+  created_at: string;
+};
+
+export type OpenTrainerSlot = {
+  id: string;
+  trainer_user_id: string;
+  starts_at: string;
+  duration_minutes: number;
+  slot_type: SlotType;
+};
+
+export type TrainerReview = {
+  id: string;
+  order_id: string;
+  client_user_id: string;
+  trainer_user_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+};
+
+export type TrainerRating = {
+  trainer_user_id: string;
+  avg_rating: number;
+  review_count: number;
+};
+
+export type FormReviewStatus = 'pending' | 'reviewed';
+
+export type TrainerFormReview = {
+  id: string;
+  trainer_user_id: string;
+  client_user_id: string;
+  exercise_name: string;
+  video_url: string;
+  status: FormReviewStatus;
+  voice_note_url: string | null;
+  comment: string;
+  created_at: string;
+  reviewed_at: string | null;
 };
 
 export type TrainerOrderStatus = 'pending' | 'paid' | 'fulfilled' | 'refunded';

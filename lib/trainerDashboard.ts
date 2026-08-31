@@ -1,6 +1,14 @@
 import { getCheckoutRedirectUrl, openCheckoutUrl } from './checkout';
 import { supabase } from './supabase';
-import type { TrainerOrderView, TrainerProfile } from './types';
+import type {
+  CoachingStyle,
+  SlotType,
+  TrainerFormReview,
+  TrainerOrderView,
+  TrainerProfile,
+  TrainerTimeSlot,
+  TrainingFormat,
+} from './types';
 
 async function invoke<T>(name: string, body?: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke<T & { error?: string }>(name, {
@@ -77,6 +85,11 @@ export async function submitTrainerProfile(params: {
   bio: string;
   specialty: string;
   priceCents: number;
+  introVideoUrl?: string | null;
+  trainingFormat?: TrainingFormat[];
+  locationText?: string;
+  defaultVideoCallLink?: string | null;
+  coachingStyle?: CoachingStyle | null;
 }): Promise<void> {
   await invoke('trainer-signup', params);
 }
@@ -88,4 +101,93 @@ export async function deliverPlan(params: {
   items: { exerciseId: string; sets: number | null; reps: number | null; notes: string }[];
 }): Promise<void> {
   await invoke('trainer-deliver-plan', params);
+}
+
+// ─────────────────────────────────────────────
+// Trainer-side availability management. Direct table writes work here
+// (unlike trainer_profiles) because trainer_time_slots' RLS already lets a
+// trainer manage rows where trainer_user_id = auth.uid() -- no admin-only
+// lockdown, no Edge Function needed.
+// ─────────────────────────────────────────────
+export async function createTimeSlot(params: { startsAt: string; durationMinutes: number; slotType: SlotType }): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) throw new Error('Not signed in.');
+
+  // Snapshot the trainer's current default call link onto the slot, so a
+  // later profile edit never silently changes a client's already-booked
+  // meeting link.
+  const { data: profile } = await supabase
+    .from('trainer_profiles')
+    .select('default_video_call_link')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const { error } = await supabase.from('trainer_time_slots').insert({
+    trainer_user_id: userId,
+    starts_at: params.startsAt,
+    duration_minutes: params.durationMinutes,
+    slot_type: params.slotType,
+    video_call_link: (profile as { default_video_call_link: string | null } | null)?.default_video_call_link ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchMySlots(): Promise<{ slots: TrainerTimeSlot[]; bookedNames: Map<string, string> }> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return { slots: [], bookedNames: new Map() };
+
+  const { data, error } = await supabase
+    .from('trainer_time_slots')
+    .select('*')
+    .eq('trainer_user_id', userId)
+    .order('starts_at', { ascending: true });
+  if (error) throw new Error(error.message);
+
+  const slots = (data ?? []) as TrainerTimeSlot[];
+  const bookedIds = [...new Set(slots.map((s) => s.booked_by_user_id).filter((id): id is string => !!id))];
+  const bookedNames = new Map<string, string>();
+  if (bookedIds.length > 0) {
+    const { data: profiles } = await supabase.from('profiles').select('id, display_name').in('id', bookedIds);
+    for (const p of (profiles ?? []) as { id: string; display_name: string | null }[]) {
+      bookedNames.set(p.id, p.display_name || 'Client');
+    }
+  }
+  return { slots, bookedNames };
+}
+
+export async function deleteSlot(slotId: string): Promise<void> {
+  const { error } = await supabase.from('trainer_time_slots').delete().eq('id', slotId);
+  if (error) throw new Error(error.message);
+}
+
+// ─────────────────────────────────────────────
+// Trainer-side async form reviews.
+// ─────────────────────────────────────────────
+export async function fetchMyFormReviewRequests(): Promise<TrainerFormReview[]> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('trainer_form_reviews')
+    .select('*')
+    .eq('trainer_user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function respondToFormReview(id: string, params: { voiceNoteUrl: string | null; comment: string }): Promise<void> {
+  const { error } = await supabase
+    .from('trainer_form_reviews')
+    .update({
+      voice_note_url: params.voiceNoteUrl,
+      comment: params.comment,
+      status: 'reviewed',
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
 }
