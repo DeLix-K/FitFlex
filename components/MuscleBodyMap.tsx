@@ -3,13 +3,18 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { dark } from '../lib/theme';
 
 // Source renders are 340x495 (front) / 340x485 (back) -- hit-regions below
-// are hand-calibrated against those exact pixel dimensions, then scaled to
-// whatever DISPLAY_WIDTH the map renders at. The artwork itself is a single
-// flat image with every muscle already rendered green, so "selecting" a
-// muscle can't recolor the pixel art directly (there's no per-muscle mask) --
-// instead a translucent ring is drawn over the tapped region, and the
-// matching label chip below highlights, same as the reference mockup shows
-// happening to the active chip.
+// are calibrated by actually analyzing the pixel art (scripted green-pixel
+// blob detection for chest/core/biceps/quadriceps/back/hamstrings, which are
+// pre-tinted green in the source image; silhouette/brightness edge-detection
+// for shoulders/triceps, which the source art leaves untinted gray but are
+// still real, visible anatomy), not eyeballed guesses -- see the coordinates
+// verified against the actual images before this fix. Scaled to whatever
+// DISPLAY_WIDTH the map renders at. The artwork itself is a single flat
+// image with every trainable muscle already rendered green, so "selecting"
+// a muscle can't recolor the pixel art directly (there's no per-muscle
+// mask) -- instead a translucent ring is drawn over the tapped region, and
+// the matching label chip below highlights, same as the reference mockup
+// shows happening to the active chip.
 const DISPLAY_WIDTH = 230;
 const FRONT_SRC = { w: 340, h: 495 };
 const BACK_SRC = { w: 340, h: 485 };
@@ -17,25 +22,25 @@ const BACK_SRC = { w: 340, h: 485 };
 type Region = { key: string; x: number; y: number; w: number; h: number; round?: boolean };
 
 const FRONT_REGIONS: Region[] = [
-  { key: 'shoulders', x: 50, y: 76, w: 58, h: 62, round: true },
-  { key: 'shoulders', x: 232, y: 76, w: 58, h: 62, round: true },
-  { key: 'chest', x: 103, y: 78, w: 134, h: 72 },
-  { key: 'biceps', x: 30, y: 140, w: 58, h: 92 },
-  { key: 'biceps', x: 252, y: 140, w: 58, h: 92 },
-  { key: 'core', x: 113, y: 152, w: 114, h: 105 },
-  { key: 'quadriceps', x: 100, y: 262, w: 64, h: 150 },
-  { key: 'quadriceps', x: 176, y: 262, w: 64, h: 150 },
+  { key: 'shoulders', x: 50, y: 86, w: 52, h: 44, round: true },
+  { key: 'shoulders', x: 190, y: 86, w: 52, h: 44, round: true },
+  { key: 'chest', x: 88, y: 90, w: 118, h: 46 },
+  { key: 'biceps', x: 55, y: 124, w: 35, h: 65 },
+  { key: 'biceps', x: 203, y: 123, w: 35, h: 66 },
+  { key: 'core', x: 96, y: 135, w: 96, h: 106 },
+  { key: 'quadriceps', x: 86, y: 238, w: 45, h: 112 },
+  { key: 'quadriceps', x: 161, y: 237, w: 45, h: 113 },
 ];
 
 const BACK_REGIONS: Region[] = [
-  { key: 'shoulders', x: 50, y: 70, w: 58, h: 62, round: true },
-  { key: 'shoulders', x: 232, y: 70, w: 58, h: 62, round: true },
-  { key: 'back', x: 103, y: 70, w: 134, h: 112 },
-  { key: 'triceps', x: 30, y: 133, w: 58, h: 92 },
-  { key: 'triceps', x: 252, y: 133, w: 58, h: 92 },
-  { key: 'glutes', x: 113, y: 188, w: 114, h: 68 },
-  { key: 'hamstrings', x: 100, y: 256, w: 64, h: 150 },
-  { key: 'hamstrings', x: 176, y: 256, w: 64, h: 150 },
+  { key: 'shoulders', x: 65, y: 82, w: 60, h: 56, round: true },
+  { key: 'shoulders', x: 199, y: 82, w: 60, h: 56, round: true },
+  { key: 'back', x: 78, y: 118, w: 170, h: 60 },
+  { key: 'triceps', x: 60, y: 120, w: 38, h: 86 },
+  { key: 'triceps', x: 236, y: 120, w: 38, h: 86 },
+  { key: 'glutes', x: 108, y: 205, w: 110, h: 56 },
+  { key: 'hamstrings', x: 114, y: 260, w: 48, h: 90 },
+  { key: 'hamstrings', x: 163, y: 259, w: 48, h: 91 },
 ];
 
 const REGION_LABEL: Record<string, string> = {
