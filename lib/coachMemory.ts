@@ -68,12 +68,17 @@ export async function regenerateCoachMemoryIfStale(): Promise<string | null> {
 
   if (error || !newRows) return existingMemory;
 
-  const daysSinceUpdate = updatedAt ? (Date.now() - new Date(updatedAt).getTime()) / (1000 * 60 * 60 * 24) : Infinity;
+  // Only meaningful once a memory has actually been generated before -- a
+  // null updatedAt means "never generated," which is the bootstrap case
+  // below, not "infinitely stale." Conflating the two used to make the
+  // 7-day rule fire on the very first check with just 1 exchange, skipping
+  // BOOTSTRAP_MIN_EXCHANGES entirely.
+  const daysSinceUpdate = updatedAt ? (Date.now() - new Date(updatedAt).getTime()) / (1000 * 60 * 60 * 24) : null;
 
   const shouldRegenerate =
     newRows.length >= REGEN_THRESHOLD_EXCHANGES ||
     (!existingMemory && newRows.length >= BOOTSTRAP_MIN_EXCHANGES) ||
-    (daysSinceUpdate >= REGEN_MIN_DAYS && newRows.length >= 1);
+    (daysSinceUpdate != null && daysSinceUpdate >= REGEN_MIN_DAYS && newRows.length >= 1);
 
   if (!shouldRegenerate) return existingMemory;
 
