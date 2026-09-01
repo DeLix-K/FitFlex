@@ -39,6 +39,7 @@ import {
   type StarterTemplate,
 } from '../lib/plans';
 import { startCheckout } from '../lib/billing';
+import { formatCacheAge, loadCache, saveCache } from '../lib/offlineCache';
 import { supabase } from '../lib/supabase';
 import { dark } from '../lib/theme';
 import type {
@@ -85,6 +86,7 @@ export default function PlansScreen({ session }: { session: Session }) {
   const [completedByProgram, setCompletedByProgram] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [offlineCachedAt, setOfflineCachedAt] = useState<string | null>(null);
 
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -128,13 +130,47 @@ export default function PlansScreen({ session }: { session: Session }) {
       setSchedule(scheduleData);
       setPrograms(programsData);
       setProgramPlans(programPlansData);
-      setLoggedDates(new Set(logs.map((l) => l.logged_date)));
+      const loggedDateList = [...new Set(logs.map((l) => l.logged_date))];
+      setLoggedDates(new Set(loggedDateList));
+      setOfflineCachedAt(null);
 
       const flexiblePrograms = programsData.filter((p) => p.schedule_mode === 'flexible');
       const counts = await Promise.all(flexiblePrograms.map((p) => countCompletedSessionsForProgram(p.id)));
-      setCompletedByProgram(new Map(flexiblePrograms.map((p, i) => [p.id, counts[i]])));
+      const completedEntries: [string, number][] = flexiblePrograms.map((p, i) => [p.id, counts[i]]);
+      setCompletedByProgram(new Map(completedEntries));
+
+      // Offline mode v1: cache just enough to render today's plan read-only
+      // with no signal. Not a sync queue -- logging a workout still needs a
+      // connection. Best-effort, never blocks the live path above.
+      saveCache('plans_snapshot', {
+        plans: plansData,
+        schedule: scheduleData,
+        programs: programsData,
+        programPlans: programPlansData,
+        loggedDates: loggedDateList,
+        completedEntries,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const cached = await loadCache<{
+        plans: WorkoutPlan[];
+        schedule: PlanScheduleEntry[];
+        programs: Program[];
+        programPlans: ProgramPlanEntry[];
+        loggedDates: string[];
+        completedEntries: [string, number][];
+      }>('plans_snapshot');
+
+      if (cached) {
+        setPlans(cached.data.plans);
+        setSchedule(cached.data.schedule);
+        setPrograms(cached.data.programs);
+        setProgramPlans(cached.data.programPlans);
+        setLoggedDates(new Set(cached.data.loggedDates));
+        setCompletedByProgram(new Map(cached.data.completedEntries));
+        setOfflineCachedAt(cached.cachedAt);
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     }
   }, []);
 
@@ -433,6 +469,14 @@ export default function PlansScreen({ session }: { session: Session }) {
           </View>
         </View>
 
+        {offlineCachedAt && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              📡 Offline — showing your plan from {formatCacheAge(offlineCachedAt)}. Logging a workout still needs a connection.
+            </Text>
+          </View>
+        )}
+
         {/* ── Zone 1: Hero ── */}
         <View style={[styles.heroCard, { borderColor: heroTheme.accent, backgroundColor: heroTheme.surface }]}>
           <Text style={styles.heroLabel}>{resolved.kind === 'none' ? 'GET STARTED' : "TODAY'S SESSION"}</Text>
@@ -673,6 +717,15 @@ const styles = StyleSheet.create({
   modeChipTextActive: { color: dark.accent },
   empty: { color: dark.textFaint, textAlign: 'center', marginBottom: 12 },
   error: { color: dark.danger, marginBottom: 12 },
+  offlineBanner: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 14,
+  },
+  offlineBannerText: { color: dark.textMuted, fontSize: 12, lineHeight: 17, textAlign: 'center' },
   heroCard: { borderWidth: 1, borderRadius: 18, padding: 20, alignItems: 'center', marginBottom: 20 },
   heroLabel: { color: dark.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6 },
   heroEmoji: { fontSize: 34, marginBottom: 4 },
