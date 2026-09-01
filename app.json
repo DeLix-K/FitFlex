@@ -55,6 +55,13 @@
       ],
       "expo-sharing",
       "expo-audio",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FitFlex uses your location to track outdoor activities like runs, walks, and rides.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
       "./plugins/withoutPushEntitlement.js",
       [
         "expo-notifications",

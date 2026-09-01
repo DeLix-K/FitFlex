@@ -603,3 +603,19 @@ export type SleepBehaviorTagRow = {
   tag: SleepBehaviorTag;
   created_at: string;
 };
+
+export type OutdoorActivityType = 'run' | 'walk' | 'ride';
+
+export type RoutePoint = { lat: number; lng: number; t: number };
+
+export type OutdoorActivity = {
+  id: string;
+  user_id: string;
+  activity_type: OutdoorActivityType;
+  started_at: string;
+  ended_at: string;
+  distance_meters: number;
+  duration_seconds: number;
+  route: RoutePoint[];
+  created_at: string;
+};

@@ -21,6 +21,7 @@ import HistoryScreen from './screens/HistoryScreen';
 import ManageVideosScreen from './screens/ManageVideosScreen';
 import MerchScreen from './screens/MerchScreen';
 import NutritionScreen from './screens/NutritionScreen';
+import OutdoorActivityScreen from './screens/OutdoorActivityScreen';
 import PlansScreen from './screens/PlansScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
@@ -134,6 +135,7 @@ export default function App() {
           {activeTab === 'wellness' && <WellnessScreen />}
           {activeTab === 'exercises' && <ExerciseListScreen />}
           {activeTab === 'plans' && <PlansScreen session={session} />}
+          {activeTab === 'outdoor' && <OutdoorActivityScreen />}
           {activeTab === 'scan' && <EquipmentScanScreen />}
           {activeTab === 'foodScan' && <FoodScanScreen />}
           {activeTab === 'formCheck' && <FormCheckScreen />}

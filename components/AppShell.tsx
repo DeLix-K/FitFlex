@@ -16,6 +16,7 @@ export type Tab =
   | 'wellness'
   | 'exercises'
   | 'plans'
+  | 'outdoor'
   | 'scan'
   | 'foodScan'
   | 'formCheck'
@@ -42,6 +43,7 @@ const BASE_TABS: { label: string; value: Tab }[] = [
   { label: 'Wellness', value: 'wellness' },
   { label: 'Exercises', value: 'exercises' },
   { label: 'My Plans', value: 'plans' },
+  { label: 'Outdoor', value: 'outdoor' },
   { label: 'Scan Equipment', value: 'scan' },
   { label: 'Scan Food', value: 'foodScan' },
   { label: 'Form Check', value: 'formCheck' },
