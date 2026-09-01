@@ -28,6 +28,33 @@ async function fetchTodaysPlanName(): Promise<string | null> {
   return row?.workout_plans?.name ?? null;
 }
 
+// Surfaces the same real sleep/energy/stress data the Daily Briefing card
+// and Coach chat already use, but directly on the My Plans hero card --
+// closes a gap several real workout-tracker reviews call out (e.g. Hevy:
+// "wearable integration is logging-only, recovery data doesn't flow into
+// programming"). Deliberately NOT an AI call: pure deterministic thresholds
+// on real data, so it's free, instant, and never invents a pattern the data
+// doesn't support -- no data for a signal means no banner for it, not a
+// guess. Self-reported energy/stress take priority over sleep since
+// they're the more immediate signal when both are present.
+export function buildReadinessNote(data: DailyBriefingData): { emoji: string; text: string } | null {
+  if (data.energy != null && data.energy <= 2) {
+    return { emoji: '🔋', text: `Low energy self-rated today (${data.energy}/5) — maybe scale back volume or intensity.` };
+  }
+  if (data.stress != null && data.stress >= 4) {
+    return { emoji: '😮‍💨', text: `High stress self-rated today (${data.stress}/5) — a lighter or shorter session is fine.` };
+  }
+  if (data.sleepHours != null) {
+    if (data.sleepHours < 6) {
+      return { emoji: '😴', text: `Only ${data.sleepHours.toFixed(1)}h sleep last night — consider lighter volume today.` };
+    }
+    if (data.sleepHours >= 8) {
+      return { emoji: '⚡', text: `${data.sleepHours.toFixed(1)}h sleep last night — well rested, good day to push.` };
+    }
+  }
+  return null;
+}
+
 export async function fetchDailyBriefingData(): Promise<DailyBriefingData> {
   const today = toDateStr(new Date());
 

@@ -16,7 +16,7 @@ import SessionRecalibrationModal from '../components/SessionRecalibrationModal';
 import ThemeEmojiPicker from '../components/ThemeEmojiPicker';
 import { useAiGate } from '../hooks/useAiGate';
 import type { CoachPersonality } from '../lib/claude';
-import { fetchCoachPersonality } from '../lib/coachInsights';
+import { buildReadinessNote, fetchCoachPersonality, fetchDailyBriefingData } from '../lib/coachInsights';
 import { fetchExercises } from '../lib/exercises';
 import {
   addPlanToProgram,
@@ -99,6 +99,7 @@ export default function PlansScreen({ session }: { session: Session }) {
 
   const [recalibrateOpen, setRecalibrateOpen] = useState(false);
   const [personality, setPersonality] = useState<CoachPersonality>('encouraging');
+  const [readiness, setReadiness] = useState<{ emoji: string; text: string } | null>(null);
   const aiGate = useAiGate();
   const isPremium = aiGate.isPremium === true;
 
@@ -145,6 +146,9 @@ export default function PlansScreen({ session }: { session: Session }) {
 
   useEffect(() => {
     fetchCoachPersonality().then(setPersonality).catch(() => {});
+    fetchDailyBriefingData()
+      .then((d) => setReadiness(buildReadinessNote(d)))
+      .catch(() => {});
   }, []);
 
   const createNewPlan = async () => {
@@ -449,6 +453,12 @@ export default function PlansScreen({ session }: { session: Session }) {
             </Text>
           )}
 
+          {readiness && (
+            <Text style={styles.readinessText}>
+              {readiness.emoji} {readiness.text}
+            </Text>
+          )}
+
           {resolved.plan ? (
             <Pressable
               style={styles.heroButton}
@@ -669,6 +679,7 @@ const styles = StyleSheet.create({
   heroTitle: { color: dark.text, fontSize: 19, fontWeight: '800', textAlign: 'center' },
   heroProgress: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, marginTop: 8, textAlign: 'center' },
   heroSubtitle: { color: dark.textMuted, fontSize: 13, marginTop: 10, textAlign: 'center' },
+  readinessText: { color: dark.textMuted, fontSize: 12, fontWeight: '600', marginTop: 10, textAlign: 'center', lineHeight: 17 },
   heroButton: { backgroundColor: dark.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24, marginTop: 14 },
   heroButtonText: { color: '#0a0a0a', fontWeight: '800' },
   sectionTitle: { color: dark.text, fontSize: 15, fontWeight: '700', marginBottom: 10, marginTop: 18 },
