@@ -72,6 +72,11 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
   const [dailyData, setDailyData] = useState<DailyBriefingData | null>(null);
   const [coachMemory, setCoachMemory] = useState<string | null>(null);
   const [memoryModalOpen, setMemoryModalOpen] = useState(false);
+  // Session continuity reloads real past messages on mount, so a returning
+  // user with any history would otherwise never see the dashboard (Daily
+  // Briefing, quick prompts, etc.) again -- this lets them step back to it
+  // without losing the loaded thread, and back again with no new message.
+  const [dashboardOpen, setDashboardOpen] = useState(false);
   const [recalibrateOpen, setRecalibrateOpen] = useState(false);
   const [voiceRepliesOn, setVoiceRepliesOn] = useState(false);
   const aiGate = useAiGate();
@@ -158,6 +163,7 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
 
     setError(null);
     setInput('');
+    setDashboardOpen(false);
     const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: trimmed }];
     setMessages(nextMessages);
     setSending(true);
@@ -178,6 +184,8 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
       setSending(false);
     }
   };
+
+  const showDashboard = messages.length === 0 || dashboardOpen;
 
   const voice = useVoiceInput((transcript) => send(transcript));
 
@@ -251,8 +259,14 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
         contentContainerStyle={styles.messagesContent}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
-        {messages.length === 0 && aiGate.loaded && (
+        {showDashboard && aiGate.loaded && (
           <View style={styles.emptyState}>
+            {messages.length > 0 && (
+              <Pressable style={styles.backToChat} onPress={() => setDashboardOpen(false)}>
+                <Text style={styles.backToChatText}>← Back to Chat</Text>
+              </Pressable>
+            )}
+
             <DailyBriefingCard isPremium={!!aiGate.isPremium} personality={personality} />
             <PostWorkoutInsightCard isPremium={!!aiGate.isPremium} personality={personality} />
 
@@ -287,19 +301,27 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
           </View>
         )}
 
-        {messages.map((message, index) => (
-          <View
-            key={index}
-            style={[
-              styles.bubble,
-              message.role === 'user' ? styles.bubbleUser : styles.bubbleCoach,
-            ]}
-          >
-            <Text style={message.role === 'user' ? styles.bubbleUserText : styles.bubbleCoachText}>
-              {message.content}
-            </Text>
-          </View>
-        ))}
+        {!showDashboard && (
+          <>
+            <Pressable style={styles.dashboardLink} onPress={() => setDashboardOpen(true)}>
+              <Text style={styles.dashboardLinkText}>← Coach Dashboard</Text>
+            </Pressable>
+
+            {messages.map((message, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.bubble,
+                  message.role === 'user' ? styles.bubbleUser : styles.bubbleCoach,
+                ]}
+              >
+                <Text style={message.role === 'user' ? styles.bubbleUserText : styles.bubbleCoachText}>
+                  {message.content}
+                </Text>
+              </View>
+            ))}
+          </>
+        )}
 
         {sending && (
           <View style={styles.loadingRow}>
@@ -414,6 +436,22 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     paddingBottom: 8,
+  },
+  backToChat: {
+    marginBottom: 14,
+  },
+  backToChatText: {
+    color: dark.accent,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  dashboardLink: {
+    marginBottom: 14,
+  },
+  dashboardLinkText: {
+    color: dark.accent,
+    fontSize: 13,
+    fontWeight: '600',
   },
   actionRow: {
     flexDirection: 'row',
