@@ -2,6 +2,8 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import RouteMap from '../components/RouteMap';
+import { useAiGate } from '../hooks/useAiGate';
+import { startCheckout } from '../lib/billing';
 import {
   computeRouteDistanceMeters,
   deleteOutdoorActivity,
@@ -13,6 +15,22 @@ import {
 } from '../lib/outdoorActivities';
 import { dark } from '../lib/theme';
 import type { OutdoorActivity, OutdoorActivityType, RoutePoint } from '../lib/types';
+
+// Tracking, stats, and history stay free for everyone -- only the live map
+// view is Premium. Shown in place of <RouteMap> for free users so the gate
+// is visible right where the value is (a real drawn route), not a separate
+// paywall screen blocking tracking itself.
+function PremiumMapGate({ upgrading, onUpgrade }: { upgrading: boolean; onUpgrade: () => void }) {
+  return (
+    <View style={styles.mapGate}>
+      <Text style={styles.mapGateTitle}>🔒 Live map view is a Premium feature</Text>
+      <Text style={styles.mapGateText}>Your route is still being tracked and saved. Upgrade to see it drawn live.</Text>
+      <Pressable style={styles.mapGateButton} onPress={onUpgrade} disabled={upgrading}>
+        {upgrading ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.mapGateButtonText}>Upgrade to Premium</Text>}
+      </Pressable>
+    </View>
+  );
+}
 
 const ACTIVITY_TYPES: { value: OutdoorActivityType; label: string; emoji: string }[] = [
   { value: 'run', label: 'Run', emoji: '🏃' },
@@ -37,6 +55,19 @@ export default function OutdoorActivityScreen() {
 
   const [history, setHistory] = useState<OutdoorActivity[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+
+  const aiGate = useAiGate();
+  const isPremium = aiGate.isPremium === true;
+  const [upgrading, setUpgrading] = useState(false);
+
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      await startCheckout();
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   const watchSubRef = useRef<Location.LocationSubscription | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -206,7 +237,7 @@ export default function OutdoorActivityScreen() {
 
       {(mode === 'tracking' || mode === 'paused') && (
         <View style={styles.card}>
-          <RouteMap route={route} />
+          {isPremium ? <RouteMap route={route} /> : <PremiumMapGate upgrading={upgrading} onUpgrade={handleUpgrade} />}
 
           <View style={styles.statsRow}>
             <View style={styles.stat}>
@@ -246,7 +277,7 @@ export default function OutdoorActivityScreen() {
             {ACTIVITY_TYPES.find((t) => t.value === activityType)?.emoji}{' '}
             {ACTIVITY_TYPES.find((t) => t.value === activityType)?.label} complete
           </Text>
-          <RouteMap route={route} />
+          {isPremium ? <RouteMap route={route} /> : <PremiumMapGate upgrading={upgrading} onUpgrade={handleUpgrade} />}
           <View style={styles.statsRow}>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{formatDuration(elapsedSeconds)}</Text>
@@ -300,6 +331,20 @@ export default function OutdoorActivityScreen() {
 }
 
 const styles = StyleSheet.create({
+  mapGate: {
+    height: 180,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: dark.accentDark,
+    backgroundColor: dark.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  mapGateTitle: { color: dark.text, fontSize: 14, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
+  mapGateText: { color: dark.textMuted, fontSize: 12, textAlign: 'center', marginBottom: 12, lineHeight: 17 },
+  mapGateButton: { backgroundColor: dark.accent, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 20 },
+  mapGateButtonText: { color: '#0a0a0a', fontWeight: '700', fontSize: 12 },
   container: { flex: 1, backgroundColor: dark.background },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
   title: { fontSize: 22, fontWeight: '700', color: dark.text },

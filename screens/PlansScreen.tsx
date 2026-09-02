@@ -106,7 +106,19 @@ export default function PlansScreen({ session }: { session: Session }) {
   const isPremium = aiGate.isPremium === true;
 
   const [upgradePromptOpen, setUpgradePromptOpen] = useState(false);
+  const [upgradePromptReason, setUpgradePromptReason] = useState<'programs' | 'offline'>('programs');
   const [upgrading, setUpgrading] = useState(false);
+  const [offlineLocked, setOfflineLocked] = useState(false);
+
+  // Checking Premium status live needs a connection -- the same problem
+  // offline mode itself exists to work around. Cache the last known status
+  // separately whenever we genuinely have it, so the offline gate below can
+  // check it even with no network.
+  useEffect(() => {
+    if (aiGate.loaded && aiGate.isPremium !== null) {
+      saveCache('premium_status', aiGate.isPremium);
+    }
+  }, [aiGate.loaded, aiGate.isPremium]);
 
   const [allExercises, setAllExercises] = useState<Exercise[] | null>(null);
   const [applyingTemplateKey, setApplyingTemplateKey] = useState<string | null>(null);
@@ -114,6 +126,7 @@ export default function PlansScreen({ session }: { session: Session }) {
 
   const fetchAll = useCallback(async () => {
     setError(null);
+    setOfflineLocked(false);
     try {
       const weekStart = startOfWeek(new Date());
       const weekEnd = new Date(weekStart);
@@ -151,6 +164,16 @@ export default function PlansScreen({ session }: { session: Session }) {
         completedEntries,
       });
     } catch (err) {
+      // Offline mode is Premium-only. Check the last known status from
+      // cache -- a live check would need the same connection that just
+      // failed.
+      const cachedPremium = await loadCache<boolean>('premium_status');
+      if (cachedPremium?.data !== true) {
+        setOfflineLocked(true);
+        setError(err instanceof Error ? err.message : String(err));
+        return;
+      }
+
       const cached = await loadCache<{
         plans: WorkoutPlan[];
         schedule: PlanScheduleEntry[];
@@ -477,6 +500,25 @@ export default function PlansScreen({ session }: { session: Session }) {
           </View>
         )}
 
+        {offlineLocked && (
+          <View style={styles.offlineLockBanner}>
+            <Text style={styles.offlineLockTitle}>🔒 Offline access is a Premium feature</Text>
+            <Text style={styles.offlineLockText}>
+              You're offline and we can't reach your real plan data. Free accounts need a connection; Premium keeps
+              your last-loaded plan available offline.
+            </Text>
+            <Pressable
+              style={styles.offlineLockButton}
+              onPress={() => {
+                setUpgradePromptReason('offline');
+                setUpgradePromptOpen(true);
+              }}
+            >
+              <Text style={styles.offlineLockButtonText}>Upgrade to Premium</Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* ── Zone 1: Hero ── */}
         <View style={[styles.heroCard, { borderColor: heroTheme.accent, backgroundColor: heroTheme.surface }]}>
           <Text style={styles.heroLabel}>{resolved.kind === 'none' ? 'GET STARTED' : "TODAY'S SESSION"}</Text>
@@ -673,10 +715,13 @@ export default function PlansScreen({ session }: { session: Session }) {
       <Modal visible={upgradePromptOpen} transparent animationType="fade" onRequestClose={() => setUpgradePromptOpen(false)}>
         <Pressable style={styles.pickerBackdrop} onPress={() => setUpgradePromptOpen(false)}>
           <View style={styles.pickerCard}>
-            <Text style={styles.pickerTitle}>🔒 Programs are a Premium feature</Text>
+            <Text style={styles.pickerTitle}>
+              {upgradePromptReason === 'offline' ? '🔒 Offline access is a Premium feature' : '🔒 Programs are a Premium feature'}
+            </Text>
             <Text style={styles.hint}>
-              Free plan includes {FREE_PROGRAM_LIMIT} program. Upgrade to Premium for unlimited programs, Smart Swap
-              All, and every card theme.
+              {upgradePromptReason === 'offline'
+                ? "Upgrade to Premium to keep your last-loaded plan available with no connection -- plus unlimited programs, Smart Swap All, and every card theme."
+                : `Free plan includes ${FREE_PROGRAM_LIMIT} program. Upgrade to Premium for unlimited programs, Smart Swap All, and every card theme.`}
             </Text>
             <Pressable style={styles.createButton} onPress={handleUpgrade} disabled={upgrading}>
               {upgrading ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.createButtonText}>Upgrade to Premium</Text>}
@@ -726,6 +771,19 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   offlineBannerText: { color: dark.textMuted, fontSize: 12, lineHeight: 17, textAlign: 'center' },
+  offlineLockBanner: {
+    borderWidth: 1,
+    borderColor: dark.accentDark,
+    backgroundColor: dark.surfaceElevated,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  offlineLockTitle: { color: dark.text, fontSize: 14, fontWeight: '700', marginBottom: 6, textAlign: 'center' },
+  offlineLockText: { color: dark.textMuted, fontSize: 12, lineHeight: 17, textAlign: 'center', marginBottom: 12 },
+  offlineLockButton: { backgroundColor: dark.accent, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 20 },
+  offlineLockButtonText: { color: '#0a0a0a', fontWeight: '700', fontSize: 12 },
   heroCard: { borderWidth: 1, borderRadius: 18, padding: 20, alignItems: 'center', marginBottom: 20 },
   heroLabel: { color: dark.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 6 },
   heroEmoji: { fontSize: 34, marginBottom: 4 },
