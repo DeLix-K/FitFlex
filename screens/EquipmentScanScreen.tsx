@@ -1,7 +1,7 @@
 import PhotoScanScreen from '../components/PhotoScanScreen';
 import { EQUIPMENT_SCAN_PROMPT } from '../lib/claude';
 
-export default function EquipmentScanScreen() {
+export default function EquipmentScanScreen({ onBack }: { onBack?: () => void }) {
   return (
     <PhotoScanScreen
       title="Scan Equipment"
@@ -9,6 +9,8 @@ export default function EquipmentScanScreen() {
       prompt={EQUIPMENT_SCAN_PROMPT}
       loadingLabel="Identifying equipment..."
       historyKind="equipment_scan"
+      backLabel="Exercises"
+      onBack={onBack}
     />
   );
 }

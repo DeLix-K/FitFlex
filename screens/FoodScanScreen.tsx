@@ -129,7 +129,7 @@ function AddToMealsForm({ aiResult }: { aiResult: string }) {
   );
 }
 
-export default function FoodScanScreen() {
+export default function FoodScanScreen({ onBack }: { onBack?: () => void }) {
   return (
     <PhotoScanScreen
       title="Scan Food"
@@ -137,6 +137,8 @@ export default function FoodScanScreen() {
       prompt={FOOD_SCAN_PROMPT}
       loadingLabel="Analyzing food..."
       historyKind="food_scan"
+      backLabel="Nutrition"
+      onBack={onBack}
       renderAfterResult={(result) => <AddToMealsForm aiResult={result} />}
     />
   );

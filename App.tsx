@@ -7,30 +7,22 @@ import { CartProvider } from './lib/cartContext';
 import { exchangeOuraCode } from './lib/oura';
 import { supabase } from './lib/supabase';
 import AuthScreen from './screens/AuthScreen';
-import ChallengesScreen from './screens/ChallengesScreen';
 import CoachScreen from './screens/CoachScreen';
-import CoursesScreen from './screens/CoursesScreen';
 import DashboardScreen from './screens/DashboardScreen';
-import DigitalProductsScreen from './screens/DigitalProductsScreen';
 import EquipmentScanScreen from './screens/EquipmentScanScreen';
 import ExerciseListScreen from './screens/ExerciseListScreen';
-import FoodScanScreen from './screens/FoodScanScreen';
 import FormCheckScreen from './screens/FormCheckScreen';
-import HabitsScreen from './screens/HabitsScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import ManageVideosScreen from './screens/ManageVideosScreen';
-import MerchScreen from './screens/MerchScreen';
 import NutritionScreen from './screens/NutritionScreen';
-import OutdoorActivityScreen from './screens/OutdoorActivityScreen';
-import PlansScreen from './screens/PlansScreen';
+import PlansHubScreen from './screens/PlansHubScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import ProgressScreen from './screens/ProgressScreen';
 import ResetPasswordScreen from './screens/ResetPasswordScreen';
-import SleepScreen from './screens/SleepScreen';
-import StreaksScreen from './screens/StreaksScreen';
+import ShopScreen from './screens/ShopScreen';
 import TrainerDashboardScreen from './screens/TrainerDashboardScreen';
-import TrainersScreen from './screens/TrainersScreen';
 import WearablesScreen from './screens/WearablesScreen';
-import WellnessScreen from './screens/WellnessScreen';
+import WellnessHubScreen from './screens/WellnessHubScreen';
 
 export default function App() {
   const { session, loading } = useAuth();
@@ -127,26 +119,18 @@ export default function App() {
         <AppShell session={session} activeTab={activeTab} onChangeTab={setActiveTab}>
           {activeTab === 'dashboard' && <DashboardScreen onNavigate={setActiveTab} />}
           {activeTab === 'coach' && <CoachScreen onNavigate={setActiveTab} />}
-          {activeTab === 'streaks' && <StreaksScreen />}
-          {activeTab === 'challenges' && <ChallengesScreen />}
-          {activeTab === 'wearables' && <WearablesScreen />}
-          {activeTab === 'sleep' && <SleepScreen />}
-          {activeTab === 'habits' && <HabitsScreen />}
-          {activeTab === 'wellness' && <WellnessScreen />}
-          {activeTab === 'exercises' && <ExerciseListScreen />}
-          {activeTab === 'plans' && <PlansScreen session={session} />}
-          {activeTab === 'outdoor' && <OutdoorActivityScreen />}
-          {activeTab === 'scan' && <EquipmentScanScreen />}
-          {activeTab === 'foodScan' && <FoodScanScreen />}
-          {activeTab === 'formCheck' && <FormCheckScreen />}
+          {activeTab === 'wearables' && <WearablesScreen onBack={() => setActiveTab('profile')} />}
+          {activeTab === 'wellness' && <WellnessHubScreen />}
+          {activeTab === 'exercises' && <ExerciseListScreen onNavigate={setActiveTab} />}
+          {activeTab === 'plans' && <PlansHubScreen session={session} />}
+          {activeTab === 'scan' && <EquipmentScanScreen onBack={() => setActiveTab('exercises')} />}
+          {activeTab === 'formCheck' && <FormCheckScreen onBack={() => setActiveTab('coach')} />}
           {activeTab === 'nutrition' && <NutritionScreen onNavigate={setActiveTab} />}
-          {activeTab === 'trainers' && <TrainersScreen />}
+          {activeTab === 'progress' && <ProgressScreen />}
+          {activeTab === 'shop' && <ShopScreen />}
           {activeTab === 'trainerDashboard' && <TrainerDashboardScreen />}
-          {activeTab === 'courses' && <CoursesScreen />}
-          {activeTab === 'digitalProducts' && <DigitalProductsScreen />}
-          {activeTab === 'merch' && <MerchScreen />}
-          {activeTab === 'history' && <HistoryScreen />}
-          {activeTab === 'profile' && <ProfileScreen />}
+          {activeTab === 'history' && <HistoryScreen onBack={() => setActiveTab('profile')} />}
+          {activeTab === 'profile' && <ProfileScreen onNavigate={setActiveTab} />}
           {activeTab === 'videos' && <ManageVideosScreen />}
         </AppShell>
         </CartProvider>

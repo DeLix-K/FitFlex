@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import type { Tab } from '../components/AppShell';
 import { computeTargets, deleteAccount, fetchBodyStats, updateBodyStats } from '../lib/profile';
 import { getMyStats, updateDisplayName } from '../lib/streaks';
 import { supabase } from '../lib/supabase';
@@ -40,7 +41,7 @@ function formatMemberSince(iso: string | undefined): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
   const [stats, setStats] = useState<BodyStats>({
     height_cm: null,
     weight_kg: null,
@@ -390,6 +391,16 @@ export default function ProfileScreen() {
         </View>
       )}
 
+      <Text style={styles.sectionTitle}>More</Text>
+      <Pressable style={styles.linkRow} onPress={() => onNavigate?.('wearables')}>
+        <Text style={styles.linkRowText}>⌚ Connected Devices</Text>
+        <Text style={styles.linkRowArrow}>→</Text>
+      </Pressable>
+      <Pressable style={styles.linkRow} onPress={() => onNavigate?.('history')}>
+        <Text style={styles.linkRowText}>🕘 Activity History</Text>
+        <Text style={styles.linkRowArrow}>→</Text>
+      </Pressable>
+
       <View style={styles.dangerZone}>
         <Text style={styles.dangerTitle}>Danger Zone</Text>
         <Text style={styles.dangerText}>
@@ -641,6 +652,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: dark.textMuted,
   },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: dark.text,
+    marginTop: 24,
+    marginBottom: 10,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+  },
+  linkRowText: { color: dark.text, fontSize: 14, fontWeight: '600' },
+  linkRowArrow: { color: dark.textFaint, fontSize: 16 },
   dangerZone: {
     borderWidth: 1,
     borderColor: dark.danger,

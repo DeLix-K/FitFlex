@@ -49,8 +49,8 @@ export default function SleepReadinessCard({
       <View style={styles.card}>
         <Text style={styles.title}>Daily Readiness Score</Text>
         <Text style={styles.emptyText}>
-          Connect Oura on the Wearables tab to see your real readiness score, HRV, and resting heart
-          rate — this app never estimates these without a real device.
+          Connect Oura under Profile → Connected Devices to see your real readiness score, HRV, and
+          resting heart rate — this app never estimates these without a real device.
         </Text>
       </View>
     );

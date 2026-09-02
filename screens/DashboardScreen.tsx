@@ -115,12 +115,12 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (tab: Tab)
       </Pressable>
 
       <View style={styles.statsGrid}>
-        <Pressable style={styles.statCard} onPress={() => onNavigate('streaks')}>
+        <Pressable style={styles.statCard} onPress={() => onNavigate('progress')}>
           <Text style={styles.statIcon}>🔥</Text>
           <Text style={styles.statLabel}>STREAK</Text>
           <Text style={styles.statValue}>{data.currentStreak} days</Text>
         </Pressable>
-        <Pressable style={styles.statCard} onPress={() => onNavigate('challenges')}>
+        <Pressable style={styles.statCard} onPress={() => onNavigate('progress')}>
           <Text style={styles.statIcon}>🏆</Text>
           <Text style={styles.statLabel}>CHALLENGES</Text>
           <Text style={styles.statValue}>{data.activeChallengeCount} active</Text>
@@ -130,7 +130,7 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (tab: Tab)
           <Text style={styles.statLabel}>WEARABLE</Text>
           <Text style={styles.statValue}>{data.wearableConnected ? 'Connected' : 'Not connected'}</Text>
         </Pressable>
-        <Pressable style={styles.statCard} onPress={() => onNavigate('sleep')}>
+        <Pressable style={styles.statCard} onPress={() => onNavigate('wellness')}>
           <Text style={styles.statIcon}>🌙</Text>
           <Text style={styles.statLabel}>SLEEP</Text>
           <Text style={styles.statValue}>{formatSleep(data.lastNightMinutes)}</Text>
@@ -141,17 +141,12 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (tab: Tab)
       <View style={styles.tileGrid}>
         {(
           [
-            { label: 'Habits', icon: '✅', tab: 'habits' },
             { label: 'Wellness', icon: '🧘', tab: 'wellness' },
             { label: 'Exercises', icon: '🏋️', tab: 'exercises' },
             { label: 'My Plans', icon: '📅', tab: 'plans' },
-            { label: 'Scan Equipment', icon: '📷', tab: 'scan' },
-            { label: 'Scan Food', icon: '🥑', tab: 'foodScan' },
             { label: 'Nutrition', icon: '🍎', tab: 'nutrition' },
-            { label: 'Trainers', icon: '💪', tab: 'trainers' },
-            { label: 'Courses', icon: '🎓', tab: 'courses' },
-            { label: 'Guides & Plans', icon: '📖', tab: 'digitalProducts' },
-            { label: 'Merch', icon: '👕', tab: 'merch' },
+            { label: 'Shop', icon: '🛍️', tab: 'shop' },
+            { label: 'Progress', icon: '📈', tab: 'progress' },
             { label: 'History', icon: '🕘', tab: 'history' },
             { label: 'Profile', icon: '👤', tab: 'profile' },
           ] as { label: string; icon: string; tab: Tab }[]

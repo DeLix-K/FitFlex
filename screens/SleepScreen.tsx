@@ -209,7 +209,7 @@ export default function SleepScreen() {
         <>
           <Text style={styles.title}>Sleep & Recovery</Text>
           <Text style={styles.subtitle}>
-            Log your sleep manually, or connect Oura on the Wearables tab to sync it automatically.
+            Log your sleep manually, or connect Oura under Profile → Connected Devices to sync it automatically.
           </Text>
           {syncNote && <Text style={styles.note}>{syncNote}</Text>}
           {error && <Text style={styles.error}>{error}</Text>}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import AiUsageIndicator from '../components/AiUsageIndicator';
+import type { Tab as AppTab } from '../components/AppShell';
 import CreateCustomExerciseModal from '../components/CreateCustomExerciseModal';
 import ExerciseCard from '../components/ExerciseCard';
 import MuscleBodyMap from '../components/MuscleBodyMap';
@@ -26,7 +27,7 @@ const CATEGORY_FILTERS: { label: string; value: ExerciseCategory | 'all' }[] = [
   { label: 'Gym', value: 'gym' },
 ];
 
-export default function ExerciseListScreen() {
+export default function ExerciseListScreen({ onNavigate }: { onNavigate?: (tab: AppTab) => void }) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [userId, setUserId] = useState<string | null>(null);
@@ -159,6 +160,9 @@ export default function ExerciseListScreen() {
           <>
             <View style={styles.usageRow}>
               <AiUsageIndicator isPremium={aiGate.isPremium} remaining={aiGate.remaining} loaded={aiGate.loaded} />
+              <Pressable style={styles.scanButton} onPress={() => onNavigate?.('scan')}>
+                <Text style={styles.scanButtonText}>📷 Scan Equipment</Text>
+              </Pressable>
             </View>
 
             <View style={styles.searchRow}>
@@ -285,6 +289,22 @@ const styles = StyleSheet.create({
   usageRow: {
     paddingHorizontal: 20,
     paddingTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  scanButton: {
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  scanButtonText: {
+    color: dark.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
   },
   searchRow: {
     paddingHorizontal: 20,

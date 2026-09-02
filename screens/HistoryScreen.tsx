@@ -69,7 +69,7 @@ function formatDate(iso: string): string {
     date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function HistoryScreen() {
+export default function HistoryScreen({ onBack }: { onBack?: () => void }) {
   const [entries, setEntries] = useState<AiHistoryEntry[]>([]);
   const [filter, setFilter] = useState<AiHistoryKind | 'all'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -101,6 +101,11 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
+      {onBack && (
+        <Pressable onPress={onBack}>
+          <Text style={styles.back}>{'< Profile'}</Text>
+        </Pressable>
+      )}
       <Text style={styles.title}>History</Text>
 
       <ScrollView
@@ -181,6 +186,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: dark.background,
+  },
+  back: {
+    color: dark.accent,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 16,
+    marginHorizontal: 20,
   },
   title: {
     fontSize: 22,

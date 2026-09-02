@@ -36,6 +36,8 @@ export default function PhotoScanScreen({
   loadingLabel,
   historyKind,
   renderAfterResult,
+  backLabel,
+  onBack,
 }: {
   title: string;
   subtitle: string;
@@ -43,6 +45,8 @@ export default function PhotoScanScreen({
   loadingLabel: string;
   historyKind: AiHistoryKind;
   renderAfterResult?: (result: string) => ReactNode;
+  backLabel?: string;
+  onBack?: () => void;
 }) {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -116,6 +120,11 @@ export default function PhotoScanScreen({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {onBack && (
+        <Pressable onPress={onBack}>
+          <Text style={styles.back}>{'< '}{backLabel ?? 'Back'}</Text>
+        </Pressable>
+      )}
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.subtitle}>{subtitle}</Text>
 
@@ -167,6 +176,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 40,
+  },
+  back: {
+    color: dark.accent,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   title: {
     fontSize: 22,

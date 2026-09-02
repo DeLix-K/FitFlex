@@ -13,7 +13,7 @@ const REDIRECT_URI = Platform.OS === 'web' && typeof window !== 'undefined'
 // here honestly as "Coming soon" rather than faking a connected state.
 const COMING_SOON = ['Fitbit', 'Apple Health', 'Google Health Connect', 'Garmin'];
 
-export default function WearablesScreen() {
+export default function WearablesScreen({ onBack }: { onBack?: () => void }) {
   const [data, setData] = useState<OuraData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -68,6 +68,11 @@ export default function WearablesScreen() {
 
   return (
     <View style={styles.container}>
+      {onBack && (
+        <Pressable onPress={onBack}>
+          <Text style={styles.back}>{'< Profile'}</Text>
+        </Pressable>
+      )}
       <Text style={styles.title}>Wearables</Text>
       <Text style={styles.subtitle}>Connect a fitness tracker to see your daily activity here.</Text>
 
@@ -155,6 +160,12 @@ const styles = StyleSheet.create({
     backgroundColor: dark.background,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  back: {
+    color: dark.accent,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   title: {
     color: dark.text,

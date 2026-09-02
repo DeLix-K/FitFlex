@@ -5,28 +5,32 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { dark } from '../lib/theme';
 import { supabase } from '../lib/supabase';
 
+// Consolidated from 21 tabs to 9. Several former top-level tabs still exist
+// as values here (wearables, scan, formCheck, history) because they're
+// still real, reachable screens -- just relocated to "hidden routes" only
+// reachable via an in-context entry point (Profile links, Coach's Form
+// Check quick-action, an Exercises quick-action) rather than the top nav
+// bar. Streaks/Challenges/Sleep/Habits/Outdoor/Trainers/Courses/
+// Guides & Plans/Merch are fully retired as their own Tab values -- they're
+// rendered as segments *inside* the new hub screens (Progress, Wellness,
+// My Plans, Shop) via direct component imports, not via activeTab
+// switching. Scan Food is retired outright: Nutrition's own LogMealModal
+// "Snap" mode already does real photo-based food logging, better
+// integrated than the old standalone screen was.
 export type Tab =
   | 'dashboard'
   | 'coach'
-  | 'streaks'
-  | 'challenges'
   | 'wearables'
-  | 'sleep'
-  | 'habits'
   | 'wellness'
   | 'exercises'
   | 'plans'
-  | 'outdoor'
   | 'scan'
-  | 'foodScan'
   | 'formCheck'
   | 'nutrition'
   | 'history'
-  | 'trainers'
+  | 'progress'
+  | 'shop'
   | 'trainerDashboard'
-  | 'courses'
-  | 'digitalProducts'
-  | 'merch'
   | 'profile'
   | 'videos';
 
@@ -35,24 +39,12 @@ const ADMIN_EMAIL = 'teamlix6@gmail.com';
 const BASE_TABS: { label: string; value: Tab }[] = [
   { label: 'Home', value: 'dashboard' },
   { label: 'Coach', value: 'coach' },
-  { label: 'Streaks', value: 'streaks' },
-  { label: 'Challenges', value: 'challenges' },
-  { label: 'Wearables', value: 'wearables' },
-  { label: 'Sleep', value: 'sleep' },
-  { label: 'Habits', value: 'habits' },
-  { label: 'Wellness', value: 'wellness' },
-  { label: 'Exercises', value: 'exercises' },
   { label: 'My Plans', value: 'plans' },
-  { label: 'Outdoor', value: 'outdoor' },
-  { label: 'Scan Equipment', value: 'scan' },
-  { label: 'Scan Food', value: 'foodScan' },
-  { label: 'Form Check', value: 'formCheck' },
+  { label: 'Exercises', value: 'exercises' },
   { label: 'Nutrition', value: 'nutrition' },
-  { label: 'Trainers', value: 'trainers' },
-  { label: 'Courses', value: 'courses' },
-  { label: 'Guides & Plans', value: 'digitalProducts' },
-  { label: 'Merch', value: 'merch' },
-  { label: 'History', value: 'history' },
+  { label: 'Wellness', value: 'wellness' },
+  { label: 'Progress', value: 'progress' },
+  { label: 'Shop', value: 'shop' },
   { label: 'Profile', value: 'profile' },
 ];
 

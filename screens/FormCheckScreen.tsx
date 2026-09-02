@@ -1,7 +1,7 @@
 import PhotoScanScreen from '../components/PhotoScanScreen';
 import { FORM_CHECK_PROMPT } from '../lib/claude';
 
-export default function FormCheckScreen() {
+export default function FormCheckScreen({ onBack }: { onBack?: () => void }) {
   return (
     <PhotoScanScreen
       title="Form Check"
@@ -9,6 +9,8 @@ export default function FormCheckScreen() {
       prompt={FORM_CHECK_PROMPT}
       loadingLabel="Analyzing your form..."
       historyKind="form_check"
+      backLabel="Coach"
+      onBack={onBack}
     />
   );
 }
