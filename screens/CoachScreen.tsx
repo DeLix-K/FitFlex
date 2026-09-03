@@ -72,11 +72,13 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
   const [dailyData, setDailyData] = useState<DailyBriefingData | null>(null);
   const [coachMemory, setCoachMemory] = useState<string | null>(null);
   const [memoryModalOpen, setMemoryModalOpen] = useState(false);
-  // Session continuity reloads real past messages on mount, so a returning
-  // user with any history would otherwise never see the dashboard (Daily
-  // Briefing, quick prompts, etc.) again -- this lets them step back to it
-  // without losing the loaded thread, and back again with no new message.
-  const [dashboardOpen, setDashboardOpen] = useState(false);
+  // The Coach Dashboard (Daily Briefing, quick prompts, etc.) is always the
+  // landing view -- even for a returning user whose past messages just got
+  // reloaded via session continuity below. Chat only takes over once the
+  // user explicitly steps into it (sending a message, or tapping "Back to
+  // Chat" to resume a loaded thread), and "← Coach Dashboard" steps back
+  // out without losing that thread.
+  const [dashboardOpen, setDashboardOpen] = useState(true);
   const [recalibrateOpen, setRecalibrateOpen] = useState(false);
   const [voiceRepliesOn, setVoiceRepliesOn] = useState(false);
   const aiGate = useAiGate();
@@ -185,7 +187,7 @@ export default function CoachScreen({ onNavigate }: { onNavigate?: (tab: Tab) =>
     }
   };
 
-  const showDashboard = messages.length === 0 || dashboardOpen;
+  const showDashboard = dashboardOpen;
 
   const voice = useVoiceInput((transcript) => send(transcript));
 
