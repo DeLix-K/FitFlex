@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import CreateHabitModal from '../components/CreateHabitModal';
+import EmptyStateCard from '../components/EmptyStateCard';
 import HabitFreezeFooter from '../components/HabitFreezeFooter';
 import HabitInsightCard from '../components/HabitInsightCard';
 import HabitMomentumRing from '../components/HabitMomentumRing';
@@ -201,7 +202,11 @@ export default function HabitsScreen() {
       />
 
       {habits.length === 0 ? (
-        <Text style={styles.empty}>No habits yet — tap "+ New Habit" to get started.</Text>
+        <EmptyStateCard
+          image={require('../assets/photos/empty_habits.jpg')}
+          title="No habits yet"
+          subtitle='Tap "+ New Habit" to get started.'
+        />
       ) : (
         sectionOrder.map((section) => (
           <HabitTimeSection

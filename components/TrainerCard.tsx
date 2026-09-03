@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { FORMAT_OPTIONS } from '../lib/trainerMatchmaker';
 import { dark } from '../lib/theme';
 import type { TrainerProfile, TrainerRating } from '../lib/types';
@@ -8,6 +8,12 @@ import TrainerVideoPlayer from './TrainerVideoPlayer';
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
+
+// Real photo (Roman Odintsov, free under the Pexels License, no attribution
+// required) -- generic gym texture behind a trainer's initials when they
+// haven't uploaded an intro video, instead of a flat color block. Never
+// claims to be a photo of that specific trainer.
+const TRAINER_FALLBACK_BG = require('../assets/photos/trainer_fallback.jpg');
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -46,6 +52,8 @@ export default function TrainerCard({
           <TrainerVideoPlayer uri={trainer.intro_video_url} aspectRatio={16 / 10} />
         ) : (
           <View style={styles.avatarFallback}>
+            <Image source={TRAINER_FALLBACK_BG} style={styles.avatarFallbackImage} resizeMode="cover" />
+            <View style={styles.avatarFallbackDim} />
             <Text style={styles.avatarFallbackText}>{initials(trainer.display_name)}</Text>
           </View>
         )}
@@ -126,6 +134,22 @@ const styles = StyleSheet.create({
     backgroundColor: dark.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarFallbackImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  avatarFallbackDim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(10,10,10,0.6)',
   },
   avatarFallbackText: {
     color: dark.accent,

@@ -13,6 +13,7 @@ import {
 import * as Sharing from 'expo-sharing';
 import Svg, { Circle } from 'react-native-svg';
 import ViewShot from 'react-native-view-shot';
+import EmptyStateCard from '../components/EmptyStateCard';
 import MilestoneBadges, { MILESTONES } from '../components/MilestoneBadges';
 import MilestoneCelebrationModal from '../components/MilestoneCelebrationModal';
 import StreakShareCard from '../components/StreakShareCard';
@@ -509,7 +510,13 @@ export default function StreaksScreen() {
         }
         data={leaderboard}
         keyExtractor={(item) => item.user_id}
-        ListEmptyComponent={<Text style={styles.empty}>No streaks yet — be the first!</Text>}
+        ListEmptyComponent={
+          <EmptyStateCard
+            image={require('../assets/photos/empty_streaks.jpg')}
+            title="No streaks yet"
+            subtitle="Log a workout today and be the first on the board."
+          />
+        }
         renderItem={({ item, index }) => (
           <View style={[styles.row, item.user_id === userId && styles.rowMe]}>
             <Text style={styles.rank}>{index + 1}</Text>

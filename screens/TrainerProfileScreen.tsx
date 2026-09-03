@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import FormReviewRequestModal from '../components/FormReviewRequestModal';
 import StarRating from '../components/StarRating';
 import TrainerChatModal from '../components/TrainerChatModal';
@@ -8,6 +8,10 @@ import { FORMAT_OPTIONS } from '../lib/trainerMatchmaker';
 import { bookSlot, buyPackage, fetchMySessionCredits, fetchOpenSlots, fetchTrainerPackages, fetchTrainerReviews } from '../lib/trainers';
 import { dark } from '../lib/theme';
 import type { OpenTrainerSlot, TrainerProfile, TrainerRating, TrainerReview, TrainerSessionPackage } from '../lib/types';
+
+// Same generic gym-texture fallback as TrainerCard -- Pexels License, free,
+// no attribution required, never claims to depict this specific trainer.
+const TRAINER_FALLBACK_BG = require('../assets/photos/trainer_fallback.jpg');
 
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -114,6 +118,8 @@ export default function TrainerProfileScreen({
           <TrainerVideoPlayer uri={trainer.intro_video_url} aspectRatio={16 / 10} />
         ) : (
           <View style={styles.avatarFallback}>
+            <Image source={TRAINER_FALLBACK_BG} style={styles.avatarFallbackImage} resizeMode="cover" />
+            <View style={styles.avatarFallbackDim} />
             <Text style={styles.avatarFallbackText}>{initials(trainer.display_name)}</Text>
           </View>
         )}
@@ -267,7 +273,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: dark.background },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
   back: { color: dark.accent, fontSize: 14, fontWeight: '600', marginBottom: 12 },
-  avatarFallback: { width: '100%', aspectRatio: 16 / 10, borderRadius: 16, backgroundColor: dark.surfaceElevated, alignItems: 'center', justifyContent: 'center' },
+  avatarFallback: { width: '100%', aspectRatio: 16 / 10, borderRadius: 16, backgroundColor: dark.surfaceElevated, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarFallbackImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  avatarFallbackDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10,10,10,0.6)' },
   avatarFallbackText: { color: dark.accent, fontWeight: '800', fontSize: 40 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 14 },
   name: { fontSize: 20, fontWeight: '800', color: dark.text, marginBottom: 4 },

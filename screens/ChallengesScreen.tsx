@@ -13,6 +13,7 @@ import ChallengeActivityFeed from '../components/ChallengeActivityFeed';
 import ChallengeSquadPanel from '../components/ChallengeSquadPanel';
 import ChallengeStageTimeline from '../components/ChallengeStageTimeline';
 import CreateChallengeModal from '../components/CreateChallengeModal';
+import EmptyStateCard from '../components/EmptyStateCard';
 import InviteFriendsModal from '../components/InviteFriendsModal';
 import {
   consistencyPct,
@@ -341,9 +342,11 @@ export default function ChallengesScreen() {
       data={visibleChallenges}
       keyExtractor={(item) => item.id}
       ListEmptyComponent={
-        <Text style={styles.empty}>
-          {tab === 'completed' ? "You haven't completed a challenge yet." : 'No challenges here yet.'}
-        </Text>
+        <EmptyStateCard
+          image={require('../assets/photos/empty_challenges.jpg')}
+          title={tab === 'completed' ? "You haven't completed a challenge yet" : 'No challenges here yet'}
+          subtitle={tab === 'completed' ? 'Finish one to see it here.' : 'Join one above, or start your own.'}
+        />
       }
       renderItem={({ item: challenge }) => {
         const status = getChallengeStatus(challenge);
