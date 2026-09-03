@@ -1,5 +1,6 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Tab } from '../components/AppShell';
 import { getOuraData } from '../lib/oura';
 import { fetchMyProgress, fetchChallenges, getChallengeStatus } from '../lib/challenges';
@@ -7,6 +8,11 @@ import { fetchSleepHistory } from '../lib/sleep';
 import { getMyStats } from '../lib/streaks';
 import { supabase } from '../lib/supabase';
 import { dark } from '../lib/theme';
+
+// Real photo (Pixabay contributor via Pexels, free under the Pexels
+// License, no attribution required) -- trainer coaching energy behind the
+// AI Coach hero card instead of a flat color fill.
+const COACH_HERO = require('../assets/photos/coach_hero.jpg');
 
 type DashboardData = {
   displayName: string;
@@ -98,6 +104,11 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (tab: Tab)
       </View>
 
       <Pressable style={styles.heroCard} onPress={() => onNavigate('coach')}>
+        <ImageBackground source={COACH_HERO} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <LinearGradient
+          colors={['rgba(10,10,10,0.55)', 'rgba(10,10,10,0.92)']}
+          style={StyleSheet.absoluteFill}
+        />
         <Text style={styles.heroLabel}>COACH</Text>
         <Text style={styles.heroTitle}>Hi {data.displayName}, I'm your AI Coach</Text>
         <Text style={styles.heroSubtitle}>
@@ -229,6 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: dark.border,
+    overflow: 'hidden',
   },
   heroLabel: {
     color: dark.accent,

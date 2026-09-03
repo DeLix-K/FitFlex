@@ -1,6 +1,8 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,7 +12,11 @@ import {
   View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
+import { dark } from '../lib/theme';
+
+// Real photo (Victor Freitas, free under the Pexels License, no attribution
+// required) -- first-impression hero background, not a solid white screen.
+const AUTH_HERO = require('../assets/photos/auth_hero.jpg');
 
 type Mode = 'signIn' | 'signUp' | 'forgotPassword';
 
@@ -84,118 +90,152 @@ export default function AuthScreen() {
     mode === 'signIn' ? 'Log In' : mode === 'signUp' ? 'Sign Up' : 'Send Reset Link';
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <Text style={styles.title}>FitFlex</Text>
-      <Text style={styles.subtitle}>{title}</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
+    <ImageBackground source={AUTH_HERO} style={styles.bg} resizeMode="cover">
+      <LinearGradient
+        colors={['rgba(10,10,10,0.35)', 'rgba(10,10,10,0.75)', '#0a0a0a']}
+        locations={[0, 0.55, 1]}
+        style={StyleSheet.absoluteFill}
       />
-      {mode !== 'forgotPassword' && (
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          autoCapitalize="none"
-          importantForAutofill="no"
-          value={password}
-          onChangeText={setPassword}
-        />
-      )}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <Text style={styles.title}>FitFlex</Text>
+        <Text style={styles.tagline}>Train smarter. See it through.</Text>
 
-      {error && <Text style={styles.error}>{error}</Text>}
-      {message && <Text style={styles.message}>{message}</Text>}
+        <View style={styles.card}>
+          <Text style={styles.subtitle}>{title}</Text>
 
-      <Pressable style={styles.button} onPress={handleSubmit} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{buttonLabel}</Text>}
-      </Pressable>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#8a8a8a"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
+          {mode !== 'forgotPassword' && (
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#8a8a8a"
+              secureTextEntry
+              autoCapitalize="none"
+              importantForAutofill="no"
+              value={password}
+              onChangeText={setPassword}
+            />
+          )}
 
-      {mode === 'signIn' && (
-        <Pressable onPress={() => switchMode('forgotPassword')}>
-          <Text style={styles.forgotText}>Forgot password?</Text>
-        </Pressable>
-      )}
+          {error && <Text style={styles.error}>{error}</Text>}
+          {message && <Text style={styles.message}>{message}</Text>}
 
-      {mode === 'forgotPassword' ? (
-        <Pressable onPress={() => switchMode('signIn')}>
-          <Text style={styles.switchText}>Back to log in</Text>
-        </Pressable>
-      ) : (
-        <Pressable onPress={() => switchMode(mode === 'signIn' ? 'signUp' : 'signIn')}>
-          <Text style={styles.switchText}>
-            {mode === 'signIn' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
-          </Text>
-        </Pressable>
-      )}
-    </KeyboardAvoidingView>
+          <Pressable style={styles.button} onPress={handleSubmit} disabled={loading}>
+            {loading ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.buttonText}>{buttonLabel}</Text>}
+          </Pressable>
+
+          {mode === 'signIn' && (
+            <Pressable onPress={() => switchMode('forgotPassword')}>
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </Pressable>
+          )}
+
+          {mode === 'forgotPassword' ? (
+            <Pressable onPress={() => switchMode('signIn')}>
+              <Text style={styles.switchText}>Back to log in</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => switchMode(mode === 'signIn' ? 'signUp' : 'signIn')}>
+              <Text style={styles.switchText}>
+                {mode === 'signIn' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  bg: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     padding: 24,
-    backgroundColor: '#fff',
+    paddingBottom: 48,
   },
   title: {
-    fontSize: 32,
-    fontWeight: '700',
+    fontSize: 40,
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 8,
+    color: dark.text,
+  },
+  tagline: {
+    fontSize: 15,
+    textAlign: 'center',
+    color: dark.textMuted,
+    marginTop: 6,
+    marginBottom: 28,
+  },
+  card: {
+    backgroundColor: dark.surface,
+    borderWidth: 1,
+    borderColor: dark.border,
+    borderRadius: 20,
+    padding: 22,
   },
   subtitle: {
     fontSize: 18,
+    fontWeight: '700',
     textAlign: 'center',
-    color: '#666',
-    marginBottom: 24,
+    color: dark.text,
+    marginBottom: 20,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.text,
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
     fontSize: 16,
   },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: dark.accent,
     borderRadius: 8,
     padding: 14,
     alignItems: 'center',
     marginTop: 8,
   },
   buttonText: {
-    color: '#fff',
+    color: '#0a0a0a',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   switchText: {
     textAlign: 'center',
-    color: colors.primary,
+    color: dark.accent,
+    fontWeight: '600',
     marginTop: 16,
   },
   forgotText: {
     textAlign: 'center',
-    color: colors.textMuted,
+    color: dark.textMuted,
     marginTop: 12,
     fontSize: 13,
   },
   error: {
-    color: '#dc2626',
+    color: dark.danger,
     marginBottom: 12,
     textAlign: 'center',
   },
   message: {
-    color: '#16a34a',
+    color: dark.accent,
     marginBottom: 12,
     textAlign: 'center',
   },
