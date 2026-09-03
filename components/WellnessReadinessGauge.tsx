@@ -59,6 +59,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingVertical: 24,
     marginBottom: 14,
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
   },
   center: {
     ...StyleSheet.absoluteFill,
