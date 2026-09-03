@@ -296,13 +296,14 @@ const styles = StyleSheet.create({
   },
   scanButton: {
     borderWidth: 1,
-    borderColor: dark.border,
+    borderColor: dark.accentDark,
+    backgroundColor: dark.surfaceElevated,
     borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
   },
   scanButtonText: {
-    color: dark.textMuted,
+    color: dark.accent,
     fontSize: 12,
     fontWeight: '600',
   },

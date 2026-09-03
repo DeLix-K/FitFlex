@@ -165,6 +165,9 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 14,
     alignItems: 'center',
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
   },
   toggleRow: {
     flexDirection: 'row',
