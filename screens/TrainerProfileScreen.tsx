@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
   back: { color: dark.accent, fontSize: 14, fontWeight: '600', marginBottom: 12 },
   avatarFallback: { width: '100%', aspectRatio: 16 / 10, borderRadius: 16, backgroundColor: dark.surfaceElevated, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarFallbackImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  avatarFallbackImage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   avatarFallbackDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(10,10,10,0.6)' },
   avatarFallbackText: { color: dark.accent, fontWeight: '800', fontSize: 40 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 14 },

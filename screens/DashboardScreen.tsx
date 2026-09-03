@@ -104,7 +104,11 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (tab: Tab)
       </View>
 
       <Pressable style={styles.heroCard} onPress={() => onNavigate('coach')}>
-        <ImageBackground source={COACH_HERO} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <ImageBackground
+          source={COACH_HERO}
+          style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+          resizeMode="cover"
+        />
         <LinearGradient
           colors={['rgba(10,10,10,0.55)', 'rgba(10,10,10,0.92)']}
           style={StyleSheet.absoluteFill}
