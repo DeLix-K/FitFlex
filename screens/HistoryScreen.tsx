@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -77,6 +78,16 @@ export default function HistoryScreen({ onBack }: { onBack?: () => void }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Real UX bug reported live: with 14 filter categories, the row scrolls
+  // well past the screen edge with no visual cue that more exist. This
+  // fades the right edge whenever there's unscrolled content left, and
+  // hides itself once you've scrolled to the end -- not just a permanent
+  // decoration.
+  const [filterRowWidth, setFilterRowWidth] = useState(0);
+  const [filterContentWidth, setFilterContentWidth] = useState(0);
+  const [filterScrollX, setFilterScrollX] = useState(0);
+  const showRightFade = filterScrollX + filterRowWidth < filterContentWidth - 4;
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -108,25 +119,40 @@ export default function HistoryScreen({ onBack }: { onBack?: () => void }) {
       )}
       <Text style={styles.title}>History</Text>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-      >
-        {FILTERS.map((f) => (
-          <Pressable
-            key={f.value}
-            style={[styles.filterChip, filter === f.value && styles.filterChipActive]}
-            onPress={() => setFilter(f.value)}
-          >
-            <Text
-              style={[styles.filterChipText, filter === f.value && styles.filterChipTextActive]}
+      <View style={styles.filterRowWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+          onLayout={(e) => setFilterRowWidth(e.nativeEvent.layout.width)}
+          onContentSizeChange={(w) => setFilterContentWidth(w)}
+          onScroll={(e) => setFilterScrollX(e.nativeEvent.contentOffset.x)}
+          scrollEventThrottle={32}
+        >
+          {FILTERS.map((f) => (
+            <Pressable
+              key={f.value}
+              style={[styles.filterChip, filter === f.value && styles.filterChipActive]}
+              onPress={() => setFilter(f.value)}
             >
-              {f.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+              <Text
+                style={[styles.filterChipText, filter === f.value && styles.filterChipTextActive]}
+              >
+                {f.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        {showRightFade && (
+          <LinearGradient
+            colors={[`${dark.background}00`, dark.background]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.filterFadeRight}
+            pointerEvents="none"
+          />
+        )}
+      </View>
 
       {loading ? (
         <View style={styles.centered}>
@@ -202,10 +228,20 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     marginBottom: 12,
   },
+  filterRowWrap: {
+    position: 'relative',
+    marginBottom: 12,
+  },
   filterRow: {
     paddingHorizontal: 20,
-    marginBottom: 12,
     gap: 8,
+  },
+  filterFadeRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 32,
   },
   filterChip: {
     paddingVertical: 6,
