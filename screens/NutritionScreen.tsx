@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import EmptyStateCard from '../components/EmptyStateCard';
 import FillRemainingMacrosCard from '../components/FillRemainingMacrosCard';
 import InstantLogBar from '../components/InstantLogBar';
 import LogMealModal, { type LogMealMode } from '../components/LogMealModal';
@@ -134,7 +135,14 @@ export default function NutritionScreen({ onNavigate }: { onNavigate?: (tab: Tab
         {error && <Text style={styles.error}>{error}</Text>}
 
         <Text style={styles.sectionTitle}>Today's Timeline</Text>
-        {MEAL_TYPES.map((mt) => {
+        {meals.length === 0 && (
+          <EmptyStateCard
+            image={require('../assets/photos/empty_nutrition.jpg')}
+            title="Nothing logged today"
+            subtitle="Snap a photo, search, or scan a barcode above to start your timeline."
+          />
+        )}
+        {meals.length > 0 && MEAL_TYPES.map((mt) => {
           const mealsForType = meals.filter((m) => m.meal_type === mt.value);
           return (
             <View key={mt.value} style={styles.mealSection}>

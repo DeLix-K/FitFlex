@@ -12,6 +12,7 @@ import {
 import AiUsageIndicator from '../components/AiUsageIndicator';
 import BinauralBeatsLibrary from '../components/BinauralBeatsLibrary';
 import BreathworkSphere from '../components/BreathworkSphere';
+import EmptyStateCard from '../components/EmptyStateCard';
 import HabitStackSuggestion from '../components/HabitStackSuggestion';
 import SleepPerformanceInsight from '../components/SleepPerformanceInsight';
 import StressInterrupter from '../components/StressInterrupter';
@@ -338,7 +339,13 @@ export default function WellnessScreen() {
       }
       data={history.filter((h) => h.log_date !== today)}
       keyExtractor={(item) => item.id}
-      ListEmptyComponent={<Text style={styles.empty}>No past check-ins yet.</Text>}
+      ListEmptyComponent={
+        <EmptyStateCard
+          image={require('../assets/photos/empty_wellness.jpg')}
+          title="No past check-ins yet"
+          subtitle="Check in above to start tracking how you're really doing."
+        />
+      }
       renderItem={({ item }) => (
         <View style={styles.historyRow}>
           <Text style={styles.historyEmoji}>{moodEmoji(item.mood)}</Text>
