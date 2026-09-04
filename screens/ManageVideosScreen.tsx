@@ -140,10 +140,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    gap: 8,
   },
   exerciseName: {
     fontSize: 16,
     fontWeight: '700',
+    flexShrink: 1,
   },
   saved: {
     fontSize: 12,

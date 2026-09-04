@@ -391,8 +391,10 @@ const styles = StyleSheet.create({
   },
   headerTop: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    rowGap: 8,
   },
   greeting: {
     color: dark.text,

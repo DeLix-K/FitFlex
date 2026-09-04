@@ -379,7 +379,7 @@ export default function TrainerDashboardScreen() {
         ListEmptyComponent={<Text style={styles.empty}>No orders waiting right now.</Text>}
         renderItem={({ item }) => (
           <View style={styles.orderCard}>
-            <View>
+            <View style={styles.orderClientWrap}>
               <Text style={styles.orderClient}>{item.client_display_name}</Text>
               <Text style={styles.orderPrice}>{formatPrice(item.amount_cents)}</Text>
             </View>
@@ -592,11 +592,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
+    gap: 8,
+  },
+  orderClientWrap: {
+    flex: 1,
   },
   orderClient: {
     fontSize: 15,
     fontWeight: '700',
     color: dark.text,
+    flexShrink: 1,
   },
   orderPrice: {
     fontSize: 12,
@@ -624,6 +629,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
+    gap: 8,
   },
   deliveredLabel: {
     color: dark.accent,
@@ -656,11 +662,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+    gap: 8,
   },
   itemName: {
     fontSize: 15,
     fontWeight: '700',
     color: dark.text,
+    flex: 1,
   },
   remove: {
     color: dark.danger,

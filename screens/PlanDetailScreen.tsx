@@ -467,11 +467,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+    gap: 8,
   },
   exerciseName: {
     fontSize: 16,
     fontWeight: '700',
     color: dark.text,
+    flex: 1,
   },
   remove: {
     color: dark.danger,
