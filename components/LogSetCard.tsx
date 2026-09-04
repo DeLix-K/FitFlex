@@ -107,7 +107,9 @@ const styles = StyleSheet.create({
   },
   stepperRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-around',
+    rowGap: 14,
     marginBottom: 16,
   },
   stepperCol: {

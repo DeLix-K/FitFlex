@@ -290,8 +290,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    rowGap: 8,
     gap: 10,
   },
   scanButton: {
@@ -301,6 +303,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 7,
     paddingHorizontal: 14,
+    flexShrink: 0,
   },
   scanButtonText: {
     color: dark.accent,
