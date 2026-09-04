@@ -157,6 +157,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 12,
     overflow: 'hidden',
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
   },
   cardImage: {
     width: '100%',

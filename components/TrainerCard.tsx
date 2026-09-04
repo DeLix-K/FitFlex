@@ -118,6 +118,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
   },
   matchBadge: {
     marginBottom: 8,
