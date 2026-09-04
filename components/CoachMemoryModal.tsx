@@ -97,11 +97,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    gap: 10,
   },
   title: {
     color: dark.text,
     fontSize: 17,
     fontWeight: '700',
+    flexShrink: 1,
   },
   close: {
     color: dark.accent,

@@ -140,16 +140,20 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: dark.border,
     paddingVertical: 10,
+    gap: 8,
   },
   subName: {
     color: dark.text,
     fontSize: 13,
     fontWeight: '600',
+    flex: 1,
   },
   subEquip: {
     color: dark.textFaint,
     fontSize: 11,
     textTransform: 'capitalize',
+    flexShrink: 1,
+    textAlign: 'right',
   },
   comboBox: {
     marginTop: 12,

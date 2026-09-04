@@ -192,6 +192,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
+    gap: 8,
   },
   autoTag: {
     color: dark.accent,
@@ -224,6 +225,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: dark.text,
+    flexShrink: 1,
   },
   autoSubtext: {
     color: dark.textFaint,

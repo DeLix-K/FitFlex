@@ -141,8 +141,8 @@ export default function RespondToFormReviewModal({
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   card: { backgroundColor: dark.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '92%', borderWidth: 1, borderColor: dark.border },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title: { color: dark.text, fontSize: 16, fontWeight: '700' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10 },
+  title: { color: dark.text, fontSize: 16, fontWeight: '700', flex: 1 },
   close: { color: dark.accent, fontWeight: '600' },
   label: { color: dark.textMuted, fontSize: 12, fontWeight: '700', marginTop: 16, marginBottom: 8 },
   recordButton: { borderWidth: 1, borderColor: dark.accent, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
