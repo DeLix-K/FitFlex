@@ -5,6 +5,7 @@ import {
   Image,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -39,12 +40,13 @@ export default function MerchScreen() {
   const [products, setProducts] = useState<MerchProduct[]>([]);
   const [orders, setOrders] = useState<MerchOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [quickViewId, setQuickViewId] = useState<number | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<Record<number, number>>({});
   const [error, setError] = useState<string | null>(null);
-  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
+  const [ordersOpen, setOrdersOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [addedId, setAddedId] = useState<number | null>(null);
 
   const cart = useCart();
 
@@ -78,6 +80,8 @@ export default function MerchScreen() {
       color: variant.color,
       priceCents: variant.priceCents,
     });
+    setAddedId(product.id);
+    setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1400);
   };
 
   const handleCheckout = async () => {
@@ -103,17 +107,90 @@ export default function MerchScreen() {
     );
   }
 
+  const quickViewProduct = products.find((p) => p.id === quickViewId) ?? null;
+
   return (
     <>
     <Modal
-      visible={!!viewingImageUrl}
+      visible={!!quickViewProduct}
       transparent
-      animationType="fade"
-      onRequestClose={() => setViewingImageUrl(null)}
+      animationType="slide"
+      onRequestClose={() => setQuickViewId(null)}
     >
-      <Pressable style={styles.imageModalBackdrop} onPress={() => setViewingImageUrl(null)}>
-        {viewingImageUrl && (
-          <Image source={{ uri: viewingImageUrl }} style={styles.imageModalPhoto} resizeMode="contain" />
+      <Pressable style={styles.quickViewBackdrop} onPress={() => setQuickViewId(null)}>
+        {quickViewProduct && (
+          <Pressable style={styles.quickViewSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.quickViewHandle} />
+            <View style={styles.quickViewImageWrap}>
+              {quickViewProduct.thumbnailUrl ? (
+                <Image
+                  source={{ uri: quickViewProduct.thumbnailUrl }}
+                  style={styles.quickViewImage}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={styles.thumbnailPlaceholder} />
+              )}
+            </View>
+
+            <ScrollView contentContainerStyle={styles.quickViewBody}>
+              <Text style={styles.quickViewName}>{quickViewProduct.name}</Text>
+              <Text style={styles.quickViewPrice}>
+                {(() => {
+                  const chosen = quickViewProduct.variants.find(
+                    (v) => v.syncVariantId === selectedVariant[quickViewProduct.id]
+                  );
+                  return chosen ? formatPrice(chosen.priceCents) : priceRange(quickViewProduct);
+                })()}
+              </Text>
+
+              <Text style={styles.quickViewLabel}>Size / Color</Text>
+              <View style={styles.variantRow}>
+                {quickViewProduct.variants.map((variant) => {
+                  const selected = selectedVariant[quickViewProduct.id] === variant.syncVariantId;
+                  return (
+                    <Pressable
+                      key={variant.syncVariantId}
+                      style={[
+                        styles.variantChip,
+                        selected && styles.variantChipSelected,
+                        !variant.available && styles.variantChipDisabled,
+                      ]}
+                      onPress={() =>
+                        variant.available &&
+                        setSelectedVariant((s) => ({ ...s, [quickViewProduct.id]: variant.syncVariantId }))
+                      }
+                      disabled={!variant.available}
+                    >
+                      <Text style={[styles.variantChipText, selected && styles.variantChipTextSelected]}>
+                        {variant.size} / {variant.color}
+                        {!variant.available ? ' (sold out)' : ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Pressable
+                style={[styles.buyButton, addedId === quickViewProduct.id && styles.buyButtonAdded]}
+                onPress={() => handleAddToCart(quickViewProduct)}
+                disabled={!quickViewProduct.variants.some((v) => v.available)}
+              >
+                <Text style={styles.buyButtonText}>
+                  {addedId === quickViewProduct.id
+                    ? '✓ Added to Cart'
+                    : `Add to Cart — ${formatPrice(
+                        quickViewProduct.variants.find((v) => v.syncVariantId === selectedVariant[quickViewProduct.id])
+                          ?.priceCents ?? quickViewProduct.variants.find((v) => v.available)?.priceCents ?? 0
+                      )}`}
+                </Text>
+              </Pressable>
+
+              <Pressable style={styles.quickViewClose} onPress={() => setQuickViewId(null)}>
+                <Text style={styles.quickViewCloseText}>Close</Text>
+              </Pressable>
+            </ScrollView>
+          </Pressable>
         )}
       </Pressable>
     </Modal>
@@ -141,7 +218,7 @@ export default function MerchScreen() {
                 {item.thumbnailUrl ? (
                   <Image source={{ uri: item.thumbnailUrl }} style={styles.cartThumbnail} />
                 ) : (
-                  <View style={styles.thumbnailPlaceholder} />
+                  <View style={styles.cartThumbnail} />
                 )}
                 <View style={styles.cartRowInfo}>
                   <Text style={styles.cartRowName}>{item.productName}</Text>
@@ -192,6 +269,8 @@ export default function MerchScreen() {
     <FlatList
       style={styles.container}
       contentContainerStyle={styles.content}
+      numColumns={2}
+      columnWrapperStyle={styles.gridRow}
       ListHeaderComponent={
         <>
           <View style={styles.headerRow}>
@@ -211,8 +290,15 @@ export default function MerchScreen() {
           {error && <Text style={styles.error}>{error}</Text>}
 
           {orders.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>My Orders</Text>
+            <Pressable style={styles.ordersToggle} onPress={() => setOrdersOpen((o) => !o)}>
+              <Text style={styles.ordersToggleText}>
+                📦 My Orders ({orders.length})
+              </Text>
+              <Text style={styles.ordersToggleChevron}>{ordersOpen ? '▲' : '▼'}</Text>
+            </Pressable>
+          )}
+          {orders.length > 0 && ordersOpen && (
+            <View style={styles.ordersList}>
               {orders.map((order) => (
                 <View key={order.id} style={styles.orderRow}>
                   <View style={styles.orderInfo}>
@@ -224,7 +310,7 @@ export default function MerchScreen() {
                   <Text style={styles.orderPrice}>{formatPrice(order.amount_cents)}</Text>
                 </View>
               ))}
-            </>
+            </View>
           )}
 
           <Text style={styles.sectionTitle}>Shop</Text>
@@ -233,74 +319,24 @@ export default function MerchScreen() {
       data={products}
       keyExtractor={(item) => String(item.id)}
       ListEmptyComponent={<Text style={styles.empty}>No merch available yet — check back soon.</Text>}
-      renderItem={({ item }) => {
-        const expanded = expandedId === item.id;
-        const chosenVariantId = selectedVariant[item.id];
-        const chosenVariant = item.variants.find((v) => v.syncVariantId === chosenVariantId);
-
-        return (
-          <View style={styles.card}>
-            <Pressable
-              style={styles.cardTop}
-              onPress={() => setExpandedId(expanded ? null : item.id)}
-            >
-              {item.thumbnailUrl ? (
-                <Pressable onPress={() => setViewingImageUrl(item.thumbnailUrl)}>
-                  <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
-                </Pressable>
-              ) : (
-                <View style={styles.thumbnailPlaceholder} />
-              )}
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardName}>{item.name}</Text>
-                <Text style={styles.cardPrice}>{priceRange(item)}</Text>
-              </View>
-            </Pressable>
-
-            {expanded && (
-              <View style={styles.variantSection}>
-                <View style={styles.variantRow}>
-                  {item.variants.map((variant) => (
-                    <Pressable
-                      key={variant.syncVariantId}
-                      style={[
-                        styles.variantChip,
-                        chosenVariantId === variant.syncVariantId && styles.variantChipSelected,
-                        !variant.available && styles.variantChipDisabled,
-                      ]}
-                      onPress={() =>
-                        variant.available &&
-                        setSelectedVariant((s) => ({ ...s, [item.id]: variant.syncVariantId }))
-                      }
-                      disabled={!variant.available}
-                    >
-                      <Text
-                        style={[
-                          styles.variantChipText,
-                          chosenVariantId === variant.syncVariantId && styles.variantChipTextSelected,
-                        ]}
-                      >
-                        {variant.size} / {variant.color}
-                        {!variant.available ? ' (sold out)' : ''}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                <Pressable
-                  style={styles.buyButton}
-                  onPress={() => handleAddToCart(item)}
-                  disabled={!chosenVariant && !item.variants.some((v) => v.available)}
-                >
-                  <Text style={styles.buyButtonText}>
-                    Add to Cart — {formatPrice(chosenVariant?.priceCents ?? item.variants.find((v) => v.available)?.priceCents ?? 0)}
-                  </Text>
-                </Pressable>
-              </View>
+      renderItem={({ item }) => (
+        <Pressable style={styles.gridCard} onPress={() => setQuickViewId(item.id)}>
+          <View style={styles.gridImageWrap}>
+            {item.thumbnailUrl ? (
+              <Image source={{ uri: item.thumbnailUrl }} style={styles.gridImage} resizeMode="contain" />
+            ) : (
+              <View style={styles.thumbnailPlaceholder} />
             )}
+            <Pressable style={styles.gridAddButton} onPress={() => setQuickViewId(item.id)}>
+              <Text style={styles.gridAddButtonText}>+</Text>
+            </Pressable>
           </View>
-        );
-      }}
+          <View style={styles.gridInfo}>
+            <Text style={styles.gridName} numberOfLines={2}>{item.name}</Text>
+            <Text style={styles.gridPrice}>{priceRange(item)}</Text>
+          </View>
+        </Pressable>
+      )}
     />
     </>
   );
@@ -414,49 +450,94 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: dark.textMuted,
   },
-  card: {
+  ordersToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  ordersToggleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: dark.text,
+  },
+  ordersToggleChevron: {
+    fontSize: 11,
+    color: dark.textFaint,
+  },
+  ordersList: {
+    marginBottom: 4,
+  },
+  thumbnailPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    backgroundColor: dark.surfaceElevated,
+  },
+  gridRow: {
+    gap: 12,
+  },
+  gridCard: {
+    flex: 1,
     borderWidth: 1,
     borderColor: dark.border,
     backgroundColor: dark.surface,
     borderRadius: 16,
-    marginBottom: 12,
+    marginBottom: 14,
     overflow: 'hidden',
   },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  gridImageWrap: {
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: '#f4f3ee',
     padding: 12,
-    gap: 12,
   },
-  thumbnail: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    backgroundColor: dark.surfaceElevated,
+  gridImage: {
+    width: '100%',
+    height: '100%',
   },
-  thumbnailPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-    backgroundColor: dark.surfaceElevated,
+  gridAddButton: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: dark.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  cardInfo: {
-    flex: 1,
+  gridAddButtonText: {
+    color: '#0a0a0a',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 20,
   },
-  cardName: {
-    fontSize: 15,
+  gridInfo: {
+    padding: 10,
+  },
+  gridName: {
+    fontSize: 13,
     fontWeight: '700',
     color: dark.text,
+    minHeight: 34,
   },
-  cardPrice: {
+  gridPrice: {
     fontSize: 13,
     color: dark.accent,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  variantSection: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
+    fontWeight: '700',
+    marginTop: 4,
   },
   variantRow: {
     flexDirection: 'row',
@@ -492,19 +573,74 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
+  buyButtonAdded: {
+    backgroundColor: '#4d7c0f',
+  },
   buyButtonText: {
     color: '#0a0a0a',
     fontWeight: '700',
   },
-  imageModalBackdrop: {
+  quickViewBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
   },
-  imageModalPhoto: {
+  quickViewSheet: {
+    backgroundColor: dark.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  quickViewHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: dark.border,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  quickViewImageWrap: {
     width: '100%',
-    height: '80%',
+    height: 220,
+    backgroundColor: '#f4f3ee',
+    padding: 16,
+  },
+  quickViewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  quickViewBody: {
+    padding: 20,
+    paddingBottom: 32,
+  },
+  quickViewName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: dark.text,
+  },
+  quickViewPrice: {
+    fontSize: 16,
+    color: dark.accent,
+    fontWeight: '700',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  quickViewLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: dark.textMuted,
+    marginBottom: 8,
+  },
+  quickViewClose: {
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  quickViewCloseText: {
+    color: dark.textFaint,
+    fontSize: 13,
+    fontWeight: '600',
   },
   cartContainer: {
     flex: 1,
