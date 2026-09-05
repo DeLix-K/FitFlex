@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { dark } from '../lib/theme';
+import MuscleGroupVideoModal from './MuscleGroupVideoModal';
+import { getMuscleGroupVideo } from '../lib/muscleGroupVideos';
 
 // Source renders are 340x495 (front) / 340x485 (back) -- hit-regions below
 // are calibrated by actually analyzing the pixel art (scripted green-pixel
@@ -65,6 +67,7 @@ export default function MuscleBodyMap({
   onSelect: (muscle: string | null) => void;
 }) {
   const [view, setView] = useState<'front' | 'back'>('front');
+  const [videoOpen, setVideoOpen] = useState(false);
   const src = view === 'front' ? FRONT_SRC : BACK_SRC;
   const regions = view === 'front' ? FRONT_REGIONS : BACK_REGIONS;
   const scale = DISPLAY_WIDTH / src.w;
@@ -151,7 +154,15 @@ export default function MuscleBodyMap({
         </View>
       )}
 
+      {selected && getMuscleGroupVideo(selected) && (
+        <Pressable style={styles.watchButton} onPress={() => setVideoOpen(true)}>
+          <Text style={styles.watchButtonText}>▶ Watch how to train {selected}</Text>
+        </Pressable>
+      )}
+
       <Text style={styles.scrollHint}>↓ Scroll down for exercises</Text>
+
+      <MuscleGroupVideoModal muscle={selected} visible={videoOpen} onClose={() => setVideoOpen(false)} />
     </View>
   );
 }
@@ -263,5 +274,21 @@ const styles = StyleSheet.create({
     color: dark.textFaint,
     fontSize: 11,
     marginTop: 12,
+  },
+  watchButton: {
+    borderWidth: 1,
+    borderColor: dark.accentDark,
+    backgroundColor: dark.surfaceElevated,
+    borderRadius: 12,
+    paddingVertical: 10,
+    marginTop: 12,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  watchButtonText: {
+    color: dark.accent,
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'capitalize',
   },
 });

@@ -5,7 +5,9 @@
   "expo": {
     "autolinking": {
       "android": {
-        "exclude": ["react-native-maps"]
+        "exclude": [
+          "react-native-maps"
+        ]
       }
     }
   },
@@ -36,7 +38,8 @@
     "react-native-svg": "15.15.4",
     "react-native-url-polyfill": "^4.0.0",
     "react-native-view-shot": "5.1.0",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "react-native-webview": "13.16.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ExerciseVolumeChart from '../components/ExerciseVolumeChart';
 import FormGuardrailsCard from '../components/FormGuardrailsCard';
 import LogSetCard from '../components/LogSetCard';
 import MindMuscleCueButton from '../components/MindMuscleCueButton';
 import SubstitutionSection from '../components/SubstitutionSection';
+import TrainerVideoPlayer from '../components/TrainerVideoPlayer';
 import {
   computePr,
   detectWeightUnit,
@@ -103,6 +104,16 @@ export default function ExerciseDetailScreen({
         )}
         {exercise.low_impact && <Text style={styles.lowImpactTag}>🦵 Joint-Friendly</Text>}
       </View>
+
+      {exercise.video_url ? (
+        exercise.video_url.toLowerCase().endsWith('.gif') ? (
+          <View style={styles.demoWrap}>
+            <Image source={{ uri: exercise.video_url }} style={styles.demoGif} resizeMode="contain" />
+          </View>
+        ) : (
+          <TrainerVideoPlayer uri={exercise.video_url} aspectRatio={4 / 3} autoplay={false} />
+        )
+      ) : null}
 
       {exercise.instructions ? (
         <View style={styles.textCard}>
@@ -221,6 +232,20 @@ const styles = StyleSheet.create({
     color: '#22d3ee',
     fontSize: 12,
     fontWeight: '700',
+  },
+  demoWrap: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: dark.border,
+    backgroundColor: '#f4f3ee',
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  demoGif: {
+    width: '100%',
+    height: '100%',
   },
   textCard: {
     borderWidth: 1,
